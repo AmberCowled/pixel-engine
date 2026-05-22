@@ -105,10 +105,46 @@ public:
     }
 
     void OnUpdate(float deltaTime) override {
-        m_Rotation += deltaTime * 50.0f;
+        m_Rotation += deltaTime * m_RotationSpeed;
 
         auto& context = GetVulkanContext();
         
+        // UI
+        ImGui::Begin("Engine Controls");
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("DeltaTime: %.3f ms", deltaTime * 1000.0f);
+        ImGui::Separator();
+
+        bool resChanged = false;
+        if (ImGui::SliderInt("Internal Width", &m_InternalWidth, 64, 1280)) resChanged = true;
+        if (ImGui::SliderInt("Internal Height", &m_InternalHeight, 64, 720)) resChanged = true;
+        
+        if (resChanged) {
+            vkDeviceWaitIdle(context.GetDevice());
+            
+            PixelEngine::OffscreenTargetConfig offscreenConfig{};
+            offscreenConfig.width = (uint32_t)m_InternalWidth;
+            offscreenConfig.height = (uint32_t)m_InternalHeight;
+            offscreenConfig.colorFormat = VK_FORMAT_R8G8B8A8_SRGB;
+            offscreenConfig.depthFormat = context.FindSupportedFormat(
+                {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
+            );
+
+            m_OffscreenTarget = std::make_unique<PixelEngine::OffscreenTarget>(
+                context, offscreenConfig, context.GetOffscreenRenderPass()
+            );
+
+            context.UpdateUpscaleDescriptorSets(m_OffscreenTarget->GetColorImageView());
+        }
+
+        ImGui::Checkbox("Pixel Snapping", &m_PixelSnapping);
+        ImGui::ColorEdit4("Cube Color", &m_CubeColor.x);
+        ImGui::SliderFloat("Rotation Speed", &m_RotationSpeed, 0.0f, 200.0f);
+
+        ImGui::End();
+
         // Update Camera
         m_Camera.SetPerspectiveProjection(glm::radians(45.0f), m_OffscreenTarget->GetWidth() / (float)m_OffscreenTarget->GetHeight(), 0.1f, 10.0f);
         m_Camera.SetViewTarget(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f));
@@ -119,17 +155,12 @@ public:
         ubo.view = m_Camera.GetView();
         ubo.proj = m_Camera.GetProjection();
         ubo.resolution = glm::vec2(m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight());
+        ubo.pixelSnapping = m_PixelSnapping ? 1.0f : 0.0f;
+        ubo.baseColor = m_CubeColor;
 
         for (size_t i = 0; i < context.GetSwapchainImageCount(); i++) {
             context.GetUniformBuffer((uint32_t)i).WriteToBuffer(&ubo, sizeof(ubo));
         }
-
-        // UI
-        ImGui::Begin("Engine Status");
-        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::Text("DeltaTime: %.3f ms", deltaTime * 1000.0f);
-        ImGui::Text("Internal Res: %d x %d", m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight());
-        ImGui::End();
 
         ImGui::ShowDemoWindow();
     }
@@ -231,6 +262,12 @@ private:
     std::unique_ptr<PixelEngine::Buffer> m_QuadIndexBuffer;
     PixelEngine::Camera m_Camera;
     float m_Rotation = 0.0f;
+
+    int m_InternalWidth = 320;
+    int m_InternalHeight = 180;
+    bool m_PixelSnapping = true;
+    glm::vec4 m_CubeColor = {1.0f, 1.0f, 1.0f, 1.0f};
+    float m_RotationSpeed = 50.0f;
 };
 
 int main(int argc, char* argv[]) {
