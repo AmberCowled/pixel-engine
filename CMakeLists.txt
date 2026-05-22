@@ -22,4 +22,4 @@ add_subdirectory(engine)
 add_subdirectory(sandbox)
 
 # Project-wide include directory
-target_include_directories(engine-core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(engine-base INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})

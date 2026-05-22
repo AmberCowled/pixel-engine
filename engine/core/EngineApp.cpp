@@ -1,5 +1,6 @@
 #include "EngineApp.hpp"
-#include "Log.hpp"
+#include <engine/base/Log.hpp>
+#include <engine/renderer/VulkanContext.hpp>
 
 namespace PixelEngine {
 
@@ -27,6 +28,9 @@ namespace PixelEngine {
             m_Running = false;
             return;
         }
+
+        m_VulkanContext = std::make_unique<VulkanContext>();
+        m_VulkanContext->Init(m_Window);
 
         PX_CORE_INFO("Engine Initialized Successfully.");
     }
