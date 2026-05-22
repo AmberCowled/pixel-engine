@@ -8,6 +8,8 @@ add_library(engine-renderer STATIC
     UBO.hpp
     GraphicsPipeline.hpp
     GraphicsPipeline.cpp
+    Camera.hpp
+    Camera.cpp
     
     # ImGui Core
     ${imgui_SOURCE_DIR}/imgui.cpp
