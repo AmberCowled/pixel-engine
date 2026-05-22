@@ -2,7 +2,9 @@
 
 #include <string>
 #include <memory>
+#include <vector>
 #include <SDL3/SDL.h>
+#include <vulkan/vulkan.h>
 
 namespace PixelEngine {
 
@@ -34,6 +36,21 @@ namespace PixelEngine {
 
     private:
         void ProcessEvents();
+        void InitImGui();
+        void ShutdownImGui();
+        void BeginFrame();
+        void EndFrame();
+
+    private:
+        VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE;
+
+        // Frame Sync
+        uint32_t m_CurrentFrame = 0;
+        uint32_t m_ImageIndex = 0;
+        static const int MAX_FRAMES_IN_FLIGHT = 2;
+        VkSemaphore m_ImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
+        VkSemaphore m_RenderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
+        VkFence m_InFlightFences[MAX_FRAMES_IN_FLIGHT];
     };
 
     // To be defined in client

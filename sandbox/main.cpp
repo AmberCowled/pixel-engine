@@ -1,5 +1,6 @@
 #include <engine/core/EngineApp.hpp>
 #include <engine/base/Log.hpp>
+#include <imgui.h>
 
 class SandboxApp : public PixelEngine::EngineApp {
 public:
@@ -12,7 +13,12 @@ public:
     }
 
     void OnUpdate(float deltaTime) override {
-        // Update logic here
+        ImGui::Begin("Engine Status");
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("DeltaTime: %.3f ms", deltaTime * 1000.0f);
+        ImGui::End();
+
+        ImGui::ShowDemoWindow();
     }
 
     void OnRender() override {
@@ -21,8 +27,16 @@ public:
 };
 
 int main(int argc, char* argv[]) {
-    SandboxApp* app = new SandboxApp();
-    app->Run();
-    delete app;
+    try {
+        SandboxApp* app = new SandboxApp();
+        app->Run();
+        delete app;
+    } catch (const std::exception& e) {
+        PX_CORE_CRITICAL("Unhandled Exception: {0}", e.what());
+        return 1;
+    } catch (...) {
+        PX_CORE_CRITICAL("Unknown Exception occurred!");
+        return 1;
+    }
     return 0;
 }
