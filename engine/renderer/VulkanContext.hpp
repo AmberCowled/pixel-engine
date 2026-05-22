@@ -21,6 +21,17 @@ namespace PixelEngine {
         VkSurfaceKHR GetSurface() const { return m_Surface; }
         uint32_t GetGraphicsQueueFamily() const { return m_GraphicsQueueFamily; }
         VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
+        VkRenderPass GetRenderPass() const { return m_RenderPass; }
+        VkSwapchainKHR GetSwapchain() const { return m_Swapchain; }
+        VkExtent2D GetSwapchainExtent() const { return m_SwapchainExtent; }
+        size_t GetSwapchainImageCount() const { return m_SwapchainImages.size(); }
+        VkFramebuffer GetFramebuffer(uint32_t index) const { return m_SwapchainFramebuffers[index]; }
+        VkCommandPool GetCommandPool() const { return m_CommandPool; }
+        VkCommandBuffer GetCommandBuffer(uint32_t index) const { return m_CommandBuffers[index]; }
+
+        uint32_t AcquireNextImage(VkSemaphore signalSemaphore);
+        void SubmitCommandBuffer(uint32_t imageIndex, VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence fence);
+        void PresentImage(uint32_t imageIndex, VkSemaphore waitSemaphore);
 
     private:
         void CreateInstance();
@@ -28,9 +39,23 @@ namespace PixelEngine {
         void PickPhysicalDevice();
         void CreateLogicalDevice();
         void CreateSurface(SDL_Window* window);
+        void CreateSwapchain(SDL_Window* window);
+        void CreateImageViews();
+        void CreateRenderPass();
+        void CreateFramebuffers();
+        void CreateCommandPool();
+        void CreateCommandBuffers();
+        void CreateSyncObjects();
+
+        void CleanupSwapchain();
+        void RecreateSwapchain(SDL_Window* window);
 
         bool CheckValidationLayerSupport();
         std::vector<const char*> GetRequiredExtensions();
+
+        VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats);
+        VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes);
+        VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities, SDL_Window* window);
 
     private:
         VkInstance m_Instance = VK_NULL_HANDLE;
@@ -41,6 +66,20 @@ namespace PixelEngine {
 
         VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
         uint32_t m_GraphicsQueueFamily = 0;
+
+        // Swapchain
+        VkSwapchainKHR m_Swapchain = VK_NULL_HANDLE;
+        std::vector<VkImage> m_SwapchainImages;
+        std::vector<VkImageView> m_SwapchainImageViews;
+        VkFormat m_SwapchainImageFormat;
+        VkExtent2D m_SwapchainExtent;
+
+        // Rendering Resources
+        VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+        std::vector<VkFramebuffer> m_SwapchainFramebuffers;
+
+        VkCommandPool m_CommandPool = VK_NULL_HANDLE;
+        std::vector<VkCommandBuffer> m_CommandBuffers;
 
         const std::vector<const char*> m_ValidationLayers = {
             "VK_LAYER_KHRONOS_validation"

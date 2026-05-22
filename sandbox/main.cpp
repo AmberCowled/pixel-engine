@@ -1,5 +1,6 @@
 #include <engine/core/EngineApp.hpp>
 #include <engine/base/Log.hpp>
+#include <imgui.h>
 
 class SandboxApp : public PixelEngine::EngineApp {
 public:
@@ -12,7 +13,12 @@ public:
     }
 
     void OnUpdate(float deltaTime) override {
-        // Update logic here
+        ImGui::Begin("Engine Status");
+        ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
+        ImGui::Text("DeltaTime: %.3f ms", deltaTime * 1000.0f);
+        ImGui::End();
+
+        ImGui::ShowDemoWindow();
     }
 
     void OnRender() override {
