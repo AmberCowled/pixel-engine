@@ -29,6 +29,9 @@ _deps/
 .DS_Store
 Thumbs.db
 
+# Private documentation
+docs/private/
+
 # Compiled files
 *.obj
 *.exe
