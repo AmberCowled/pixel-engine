@@ -24,6 +24,7 @@ namespace PixelEngine {
         uint32_t GetGraphicsQueueFamily() const { return m_GraphicsQueueFamily; }
         VkQueue GetGraphicsQueue() const { return m_GraphicsQueue; }
         VkRenderPass GetRenderPass() const { return m_RenderPass; }
+        VkRenderPass GetOffscreenRenderPass() const { return m_OffscreenRenderPass; }
         VkSwapchainKHR GetSwapchain() const { return m_Swapchain; }
         VkExtent2D GetSwapchainExtent() const { return m_SwapchainExtent; }
         size_t GetSwapchainImageCount() const { return m_SwapchainImages.size(); }
@@ -42,6 +43,9 @@ namespace PixelEngine {
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 
+        void CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
+        VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+
     private:
         void CreateInstance();
         void SetupDebugMessenger();
@@ -51,6 +55,7 @@ namespace PixelEngine {
         void CreateSwapchain(SDL_Window* window);
         void CreateImageViews();
         void CreateRenderPass();
+        void CreateOffscreenRenderPass();
         void CreateDepthResources();
         void CreateFramebuffers();
         void CreateCommandPool();
@@ -96,6 +101,7 @@ namespace PixelEngine {
 
         // Rendering Resources
         VkRenderPass m_RenderPass = VK_NULL_HANDLE;
+        VkRenderPass m_OffscreenRenderPass = VK_NULL_HANDLE;
         std::vector<VkFramebuffer> m_SwapchainFramebuffers;
 
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
