@@ -44,10 +44,19 @@ namespace PixelEngine {
         fenceInfo.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
         fenceInfo.flags = VK_FENCE_CREATE_SIGNALED_BIT;
 
+        for (size_t i = 0; i < MAX_SWAPCHAIN_IMAGES; i++) {
+            if (vkCreateSemaphore(m_VulkanContext->GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS) {
+                PX_CORE_CRITICAL("Failed to create acquisition semaphore {0}", i);
+            }
+        }
+
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vkCreateSemaphore(m_VulkanContext->GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]);
-            vkCreateSemaphore(m_VulkanContext->GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]);
-            vkCreateFence(m_VulkanContext->GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]);
+            if (vkCreateSemaphore(m_VulkanContext->GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS) {
+                PX_CORE_CRITICAL("Failed to create render finished semaphore {0}", i);
+            }
+            if (vkCreateFence(m_VulkanContext->GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS) {
+                PX_CORE_CRITICAL("Failed to create in-flight fence {0}", i);
+            }
         }
 
         InitImGui();
@@ -56,12 +65,13 @@ namespace PixelEngine {
     }
 
     EngineApp::~EngineApp() {
-        vkDeviceWaitIdle(m_VulkanContext->GetDevice());
-        
         ShutdownImGui();
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
+        for (size_t i = 0; i < MAX_SWAPCHAIN_IMAGES; i++) {
             vkDestroySemaphore(m_VulkanContext->GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             vkDestroySemaphore(m_VulkanContext->GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
             vkDestroyFence(m_VulkanContext->GetDevice(), m_InFlightFences[i], nullptr);
         }
@@ -92,10 +102,16 @@ namespace PixelEngine {
                 EndFrame();
             }
         }
+
+        vkDeviceWaitIdle(m_VulkanContext->GetDevice());
     }
 
     void EngineApp::Close() {
         m_Running = false;
+    }
+
+    VkCommandBuffer EngineApp::GetCurrentCommandBuffer() const {
+        return m_VulkanContext->GetCommandBuffer(m_ImageIndex);
     }
 
     void EngineApp::ProcessEvents() {
@@ -175,7 +191,13 @@ namespace PixelEngine {
         vkWaitForFences(m_VulkanContext->GetDevice(), 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
         vkResetFences(m_VulkanContext->GetDevice(), 1, &m_InFlightFences[m_CurrentFrame]);
 
-        m_ImageIndex = m_VulkanContext->AcquireNextImage(m_ImageAvailableSemaphores[m_CurrentFrame]);
+        // Use a rotating set of semaphores for acquisition to avoid re-signaling while in use by swapchain
+        static uint32_t acquireSemIndex = 0;
+        m_ImageIndex = m_VulkanContext->AcquireNextImage(m_ImageAvailableSemaphores[acquireSemIndex]);
+        
+        // The acquisition semaphore must be the same one used in submit
+        m_CurrentAcquireSemIndex = acquireSemIndex;
+        acquireSemIndex = (acquireSemIndex + 1) % MAX_SWAPCHAIN_IMAGES;
 
         VkCommandBuffer commandBuffer = m_VulkanContext->GetCommandBuffer(m_ImageIndex);
         vkResetCommandBuffer(commandBuffer, 0);
@@ -214,7 +236,7 @@ namespace PixelEngine {
         vkCmdEndRenderPass(commandBuffer);
         vkEndCommandBuffer(commandBuffer);
 
-        m_VulkanContext->SubmitCommandBuffer(m_ImageIndex, m_ImageAvailableSemaphores[m_CurrentFrame], m_RenderFinishedSemaphores[m_CurrentFrame], m_InFlightFences[m_CurrentFrame]);
+        m_VulkanContext->SubmitCommandBuffer(m_ImageIndex, m_ImageAvailableSemaphores[m_CurrentAcquireSemIndex], m_RenderFinishedSemaphores[m_CurrentFrame], m_InFlightFences[m_CurrentFrame]);
         m_VulkanContext->PresentImage(m_ImageIndex, m_RenderFinishedSemaphores[m_CurrentFrame]);
 
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;

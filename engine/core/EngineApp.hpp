@@ -24,6 +24,11 @@ namespace PixelEngine {
         void Run();
         void Close();
 
+        VulkanContext& GetVulkanContext() { return *m_VulkanContext; }
+        uint32_t GetCurrentFrameIndex() const { return m_CurrentFrame; }
+        uint32_t GetCurrentImageIndex() const { return m_ImageIndex; }
+        VkCommandBuffer GetCurrentCommandBuffer() const;
+
         virtual void OnUpdate(float deltaTime) {}
         virtual void OnRender() {}
         virtual void OnEvent(SDL_Event& event) {}
@@ -47,8 +52,10 @@ namespace PixelEngine {
         // Frame Sync
         uint32_t m_CurrentFrame = 0;
         uint32_t m_ImageIndex = 0;
+        uint32_t m_CurrentAcquireSemIndex = 0;
         static const int MAX_FRAMES_IN_FLIGHT = 2;
-        VkSemaphore m_ImageAvailableSemaphores[MAX_FRAMES_IN_FLIGHT];
+        static const int MAX_SWAPCHAIN_IMAGES = 3;
+        VkSemaphore m_ImageAvailableSemaphores[MAX_SWAPCHAIN_IMAGES];
         VkSemaphore m_RenderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
         VkFence m_InFlightFences[MAX_FRAMES_IN_FLIGHT];
     };
