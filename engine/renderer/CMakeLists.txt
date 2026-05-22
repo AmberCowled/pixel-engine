@@ -10,6 +10,8 @@ add_library(engine-renderer STATIC
     GraphicsPipeline.cpp
     Camera.hpp
     Camera.cpp
+    OffscreenTarget.hpp
+    OffscreenTarget.cpp
     
     # ImGui Core
     ${imgui_SOURCE_DIR}/imgui.cpp
