@@ -33,6 +33,8 @@ namespace PixelEngine {
         void SubmitCommandBuffer(uint32_t imageIndex, VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence fence);
         void PresentImage(uint32_t imageIndex, VkSemaphore waitSemaphore);
 
+        uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
+
     private:
         void CreateInstance();
         void SetupDebugMessenger();
