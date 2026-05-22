@@ -4,6 +4,7 @@
 #include <vector>
 #include <memory>
 #include "Buffer.hpp"
+#include "UBO.hpp"
 
 struct SDL_Window;
 
@@ -45,6 +46,8 @@ namespace PixelEngine {
         void SubmitCommandBuffer(uint32_t imageIndex, VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence fence);
         void PresentImage(uint32_t imageIndex, VkSemaphore waitSemaphore);
 
+        void UpdateUpscaleDescriptorSets(VkImageView colorImageView);
+
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
 
@@ -69,7 +72,6 @@ namespace PixelEngine {
         void CreateDescriptorSetLayout();
         void CreateUniformBuffers();
         void CreateDescriptorSets();
-        void UpdateUpscaleDescriptorSets(VkImageView colorImageView);
         void CreateTextureSampler();
         void CreateSyncObjects();
 

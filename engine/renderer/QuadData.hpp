@@ -1,50 +1,18 @@
 #pragma once
 
-#include <glm/glm.hpp>
+#include "Vertex.hpp"
 #include <vector>
-#include <array>
-#include <vulkan/vulkan.h>
 
 namespace PixelEngine {
 
-    struct QuadVertex {
-        glm::vec2 pos;
-        glm::vec2 uv;
-
-        static VkVertexInputBindingDescription GetBindingDescription() {
-            VkVertexInputBindingDescription bindingDescription{};
-            bindingDescription.binding = 0;
-            bindingDescription.stride = sizeof(QuadVertex);
-            bindingDescription.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
-            return bindingDescription;
-        }
-
-        static std::array<VkVertexInputAttributeDescription, 2> GetAttributeDescriptions() {
-            std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions{};
-
-            attributeDescriptions[0].binding = 0;
-            attributeDescriptions[0].location = 0;
-            attributeDescriptions[0].format = VK_FORMAT_R32G32_SFLOAT;
-            attributeDescriptions[0].offset = offsetof(QuadVertex, pos);
-
-            attributeDescriptions[1].binding = 0;
-            attributeDescriptions[1].location = 1;
-            attributeDescriptions[1].format = VK_FORMAT_R32G32_SFLOAT;
-            attributeDescriptions[1].offset = offsetof(QuadVertex, uv);
-
-            return attributeDescriptions;
-        }
+    // A single large triangle that covers the entire NDC space (-1 to 1)
+    // and provides UVs from 0 to 2 (effectively 0 to 1 over the screen area)
+    const std::vector<Vertex> FULLSCREEN_TRIANGLE_VERTICES = {
+        {{-1.0f, -1.0f, 0.0f}, {1,1,1}, {0.0f, 0.0f}},
+        {{ 3.0f, -1.0f, 0.0f}, {1,1,1}, {2.0f, 0.0f}},
+        {{-1.0f,  3.0f, 0.0f}, {1,1,1}, {0.0f, 2.0f}}
     };
 
-    const std::vector<QuadVertex> FULLSCREEN_QUAD_VERTICES = {
-        {{-1.0f, -1.0f}, {0.0f, 0.0f}},
-        {{ 1.0f, -1.0f}, {1.0f, 0.0f}},
-        {{ 1.0f,  1.0f}, {1.0f, 1.0f}},
-        {{-1.0f,  1.0f}, {0.0f, 1.0f}}
-    };
-
-    const std::vector<uint16_t> FULLSCREEN_QUAD_INDICES = {
-        0, 1, 2, 2, 3, 0
-    };
+    const std::vector<uint16_t> FULLSCREEN_TRIANGLE_INDICES = { 0, 1, 2 };
 
 }
