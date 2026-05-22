@@ -4,6 +4,10 @@ project(PixelEngine VERSION 0.1.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+if (MSVC)
+    add_compile_definitions(_SILENCE_STDEXT_ARR_ITERS_DEPRECATION_WARNING)
+endif()
+
 # CPM.cmake setup
 include(cmake/CPM.cmake)
 include(cmake/Dependencies.cmake)
@@ -16,3 +20,6 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Subdirectories
 add_subdirectory(engine)
 add_subdirectory(sandbox)
+
+# Project-wide include directory
+target_include_directories(engine-core INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
