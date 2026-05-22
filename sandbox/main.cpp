@@ -6,6 +6,7 @@
 #include <engine/renderer/Vertex.hpp>
 #include <engine/renderer/UBO.hpp>
 #include <engine/renderer/CubeData.hpp>
+#include <engine/renderer/Camera.hpp>
 #include <imgui.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
@@ -61,14 +62,16 @@ public:
     void OnUpdate(float deltaTime) override {
         m_Rotation += deltaTime * 50.0f;
 
+        // Update Camera
+        auto extent = GetVulkanContext().GetSwapchainExtent();
+        m_Camera.SetPerspectiveProjection(glm::radians(45.0f), extent.width / (float)extent.height, 0.1f, 10.0f);
+        m_Camera.SetViewTarget(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+
         // Update UBO
         PixelEngine::GlobalUBO ubo{};
         ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(m_Rotation), glm::vec3(0.5f, 1.0f, 0.0f));
-        ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-        
-        auto extent = GetVulkanContext().GetSwapchainExtent();
-        ubo.proj = glm::perspective(glm::radians(45.0f), extent.width / (float)extent.height, 0.1f, 10.0f);
-        ubo.proj[1][1] *= -1; // GLM is for OpenGL, Vulkan Y is inverted
+        ubo.view = m_Camera.GetView();
+        ubo.proj = m_Camera.GetProjection();
 
         GetVulkanContext().GetUniformBuffer(GetCurrentFrameIndex()).WriteToBuffer(&ubo, sizeof(ubo));
 
@@ -117,6 +120,7 @@ private:
     std::unique_ptr<PixelEngine::GraphicsPipeline> m_Pipeline;
     std::unique_ptr<PixelEngine::Buffer> m_VertexBuffer;
     std::unique_ptr<PixelEngine::Buffer> m_IndexBuffer;
+    PixelEngine::Camera m_Camera;
     float m_Rotation = 0.0f;
 };
 
