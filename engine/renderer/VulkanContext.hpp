@@ -32,6 +32,7 @@ namespace PixelEngine {
         VkCommandBuffer GetCommandBuffer(uint32_t index) const { return m_CommandBuffers[index]; }
         VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_DescriptorSetLayout; }
         VkDescriptorSet GetDescriptorSet(uint32_t index) const { return m_DescriptorSets[index]; }
+        VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
         Buffer& GetUniformBuffer(uint32_t index) { return *m_UniformBuffers[index]; }
 
         uint32_t AcquireNextImage(VkSemaphore signalSemaphore);
@@ -103,6 +104,7 @@ namespace PixelEngine {
         // Descriptors
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
         VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
+        VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
         std::vector<std::unique_ptr<Buffer>> m_UniformBuffers;
         std::vector<VkDescriptorSet> m_DescriptorSets;
 
