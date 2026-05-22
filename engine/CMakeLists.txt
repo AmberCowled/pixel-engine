@@ -1,3 +1,4 @@
-# Engine Subdirectory
-add_subdirectory(core)
+# Engine Subdirectories
+add_subdirectory(base)
 add_subdirectory(renderer)
+add_subdirectory(core)

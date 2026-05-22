@@ -6,6 +6,8 @@
 
 namespace PixelEngine {
 
+    class VulkanContext;
+
     struct AppConfig {
         std::string Name = "Pixel Engine App";
         uint32_t Width = 1280;
@@ -28,6 +30,7 @@ namespace PixelEngine {
         bool m_Running = true;
         SDL_Window* m_Window = nullptr;
         AppConfig m_Config;
+        std::unique_ptr<VulkanContext> m_VulkanContext;
 
     private:
         void ProcessEvents();

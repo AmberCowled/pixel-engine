@@ -19,12 +19,14 @@ target_include_directories(engine-renderer PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
+    ${CMAKE_SOURCE_DIR} # Added project root for global engine/ includes
 )
 
 target_link_libraries(engine-renderer 
     PUBLIC 
         Vulkan::Vulkan 
         glm::glm
+        engine-base
     PRIVATE
-        engine-core # For SDL3 headers and logging
+        SDL3::SDL3
 )
