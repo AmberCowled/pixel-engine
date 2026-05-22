@@ -56,7 +56,7 @@ namespace PixelEngine {
         static const int MAX_FRAMES_IN_FLIGHT = 2;
         static const int MAX_SWAPCHAIN_IMAGES = 3;
         VkSemaphore m_ImageAvailableSemaphores[MAX_SWAPCHAIN_IMAGES];
-        VkSemaphore m_RenderFinishedSemaphores[MAX_FRAMES_IN_FLIGHT];
+        VkSemaphore m_RenderFinishedSemaphores[MAX_SWAPCHAIN_IMAGES];
         VkFence m_InFlightFences[MAX_FRAMES_IN_FLIGHT];
     };
 

@@ -39,6 +39,7 @@ namespace PixelEngine {
         CreateSwapchain(window);
         CreateImageViews();
         CreateRenderPass();
+        CreateOffscreenRenderPass();
         CreateDepthResources();
         CreateFramebuffers();
         CreateCommandPool();
@@ -46,6 +47,7 @@ namespace PixelEngine {
         CreateDescriptorPool();
         CreateDescriptorSetLayout();
         CreateUniformBuffers();
+        CreateTextureSampler();
         CreateDescriptorSets();
 
         PX_CORE_INFO("Vulkan Context Initialized.");
@@ -67,9 +69,24 @@ namespace PixelEngine {
                 m_DescriptorSetLayout = VK_NULL_HANDLE;
             }
 
+            if (m_UpscaleDescriptorSetLayout != VK_NULL_HANDLE) {
+                vkDestroyDescriptorSetLayout(m_Device, m_UpscaleDescriptorSetLayout, nullptr);
+                m_UpscaleDescriptorSetLayout = VK_NULL_HANDLE;
+            }
+
             if (m_PipelineLayout != VK_NULL_HANDLE) {
                 vkDestroyPipelineLayout(m_Device, m_PipelineLayout, nullptr);
                 m_PipelineLayout = VK_NULL_HANDLE;
+            }
+
+            if (m_UpscalePipelineLayout != VK_NULL_HANDLE) {
+                vkDestroyPipelineLayout(m_Device, m_UpscalePipelineLayout, nullptr);
+                m_UpscalePipelineLayout = VK_NULL_HANDLE;
+            }
+
+            if (m_TextureSampler != VK_NULL_HANDLE) {
+                vkDestroySampler(m_Device, m_TextureSampler, nullptr);
+                m_TextureSampler = VK_NULL_HANDLE;
             }
 
             m_UniformBuffers.clear();
@@ -82,6 +99,11 @@ namespace PixelEngine {
             if (m_RenderPass != VK_NULL_HANDLE) {
                 vkDestroyRenderPass(m_Device, m_RenderPass, nullptr);
                 m_RenderPass = VK_NULL_HANDLE;
+            }
+
+            if (m_OffscreenRenderPass != VK_NULL_HANDLE) {
+                vkDestroyRenderPass(m_Device, m_OffscreenRenderPass, nullptr);
+                m_OffscreenRenderPass = VK_NULL_HANDLE;
             }
 
             vkDestroyDevice(m_Device, nullptr);
@@ -325,14 +347,14 @@ namespace PixelEngine {
 
     void VulkanContext::CreateOffscreenRenderPass() {
         VkAttachmentDescription colorAttachment{};
-        colorAttachment.format = VK_FORMAT_R8G8B8A8_SRGB; // Standard for offscreen color
+        colorAttachment.format = VK_FORMAT_R8G8B8A8_SRGB;
         colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         colorAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
         colorAttachment.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL; // Will be read by quad shader
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
 
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = FindDepthFormat();
@@ -359,8 +381,6 @@ namespace PixelEngine {
         subpass.pDepthStencilAttachment = &depthAttachmentRef;
 
         VkSubpassDependency dependencies[2];
-
-        // Ensure color attachment is ready for writing
         dependencies[0].srcSubpass = VK_SUBPASS_EXTERNAL;
         dependencies[0].dstSubpass = 0;
         dependencies[0].srcStageMask = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
@@ -369,7 +389,6 @@ namespace PixelEngine {
         dependencies[0].dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
         dependencies[0].dependencyFlags = VK_DEPENDENCY_BY_REGION_BIT;
 
-        // Ensure writing is finished before reading
         dependencies[1].srcSubpass = 0;
         dependencies[1].dstSubpass = VK_SUBPASS_EXTERNAL;
         dependencies[1].srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -453,64 +472,15 @@ namespace PixelEngine {
 
     void VulkanContext::CreateDepthResources() {
         VkFormat depthFormat = FindDepthFormat();
-
-        VkImageCreateInfo imageInfo{};
-        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
-        imageInfo.imageType = VK_IMAGE_TYPE_2D;
-        imageInfo.extent.width = m_SwapchainExtent.width;
-        imageInfo.extent.height = m_SwapchainExtent.height;
-        imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
-        imageInfo.arrayLayers = 1;
-        imageInfo.format = depthFormat;
-        imageInfo.tiling = VK_IMAGE_TILING_OPTIMAL;
-        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        imageInfo.usage = VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
-        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
-
-        if (vkCreateImage(m_Device, &imageInfo, nullptr, &m_DepthImage) != VK_SUCCESS) {
-            PX_CORE_CRITICAL("Failed to create depth image!");
-        }
-
-        VkMemoryRequirements memRequirements;
-        vkGetImageMemoryRequirements(m_Device, m_DepthImage, &memRequirements);
-
-        VkMemoryAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
-        allocInfo.allocationSize = memRequirements.size;
-        allocInfo.memoryTypeIndex = FindMemoryType(memRequirements.memoryTypeBits, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
-
-        if (vkAllocateMemory(m_Device, &allocInfo, nullptr, &m_DepthImageMemory) != VK_SUCCESS) {
-            PX_CORE_CRITICAL("Failed to allocate depth image memory!");
-        }
-
-        vkBindImageMemory(m_Device, m_DepthImage, m_DepthImageMemory, 0);
-
-        VkImageViewCreateInfo viewInfo{};
-        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
-        viewInfo.image = m_DepthImage;
-        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
-        viewInfo.format = depthFormat;
-        viewInfo.subresourceRange.aspectMask = VK_IMAGE_ASPECT_DEPTH_BIT;
-        viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
-        viewInfo.subresourceRange.baseArrayLayer = 0;
-        viewInfo.subresourceRange.layerCount = 1;
-
-        if (vkCreateImageView(m_Device, &viewInfo, nullptr, &m_DepthImageView) != VK_SUCCESS) {
-            PX_CORE_CRITICAL("Failed to create depth image view!");
-        }
+        CreateImage(m_SwapchainExtent.width, m_SwapchainExtent.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_DepthImage, m_DepthImageMemory);
+        m_DepthImageView = CreateImageView(m_DepthImage, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
     }
 
     void VulkanContext::CreateFramebuffers() {
         m_SwapchainFramebuffers.resize(m_SwapchainImageViews.size());
 
         for (size_t i = 0; i < m_SwapchainImageViews.size(); i++) {
-            std::array<VkImageView, 2> attachments = {
-                m_SwapchainImageViews[i],
-                m_DepthImageView
-            };
+            std::array<VkImageView, 2> attachments = { m_SwapchainImageViews[i], m_DepthImageView };
 
             VkFramebufferCreateInfo framebufferInfo{};
             framebufferInfo.sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO;
@@ -572,15 +542,9 @@ namespace PixelEngine {
         } else {
             int width, height;
             SDL_GetWindowSizeInPixels(window, &width, &height);
-
-            VkExtent2D actualExtent = {
-                static_cast<uint32_t>(width),
-                static_cast<uint32_t>(height)
-            };
-
+            VkExtent2D actualExtent = { static_cast<uint32_t>(width), static_cast<uint32_t>(height) };
             actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
             actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
-
             return actualExtent;
         }
     }
@@ -590,7 +554,6 @@ namespace PixelEngine {
         poolInfo.sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO;
         poolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
         poolInfo.queueFamilyIndex = m_GraphicsQueueFamily;
-
         if (vkCreateCommandPool(m_Device, &poolInfo, nullptr, &m_CommandPool) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to create command pool!");
         }
@@ -598,31 +561,51 @@ namespace PixelEngine {
 
     void VulkanContext::CreateCommandBuffers() {
         m_CommandBuffers.resize(m_SwapchainImages.size());
-
         VkCommandBufferAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
         allocInfo.commandPool = m_CommandPool;
         allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
         allocInfo.commandBufferCount = (uint32_t)m_CommandBuffers.size();
-
         if (vkAllocateCommandBuffers(m_Device, &allocInfo, m_CommandBuffers.data()) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to allocate command buffers!");
         }
     }
 
     void VulkanContext::CreateDescriptorPool() {
-        VkDescriptorPoolSize poolSize{};
-        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        poolSize.descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
+        std::array<VkDescriptorPoolSize, 2> poolSizes{};
+        poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSizes[0].descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
+        poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
-        poolInfo.poolSizeCount = 1;
-        poolInfo.pPoolSizes = &poolSize;
-        poolInfo.maxSets = static_cast<uint32_t>(m_SwapchainImages.size());
+        poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
+        poolInfo.pPoolSizes = poolSizes.data();
+        poolInfo.maxSets = static_cast<uint32_t>(m_SwapchainImages.size()) * 2;
 
         if (vkCreateDescriptorPool(m_Device, &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to create descriptor pool!");
+        }
+    }
+
+    void VulkanContext::CreateTextureSampler() {
+        VkSamplerCreateInfo samplerInfo{};
+        samplerInfo.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+        samplerInfo.magFilter = VK_FILTER_NEAREST;
+        samplerInfo.minFilter = VK_FILTER_NEAREST;
+        samplerInfo.addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT;
+        samplerInfo.anisotropyEnable = VK_FALSE;
+        samplerInfo.borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK;
+        samplerInfo.unnormalizedCoordinates = VK_FALSE;
+        samplerInfo.compareEnable = VK_FALSE;
+        samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
+        samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+
+        if (vkCreateSampler(m_Device, &samplerInfo, nullptr, &m_TextureSampler) != VK_SUCCESS) {
+            PX_CORE_CRITICAL("Failed to create texture sampler!");
         }
     }
 
@@ -632,7 +615,6 @@ namespace PixelEngine {
         uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         uboLayoutBinding.descriptorCount = 1;
         uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
-        uboLayoutBinding.pImmutableSamplers = nullptr;
 
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
@@ -647,31 +629,48 @@ namespace PixelEngine {
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
         pipelineLayoutInfo.setLayoutCount = 1;
         pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
-        pipelineLayoutInfo.pushConstantRangeCount = 0;
-        pipelineLayoutInfo.pPushConstantRanges = nullptr;
 
         if (vkCreatePipelineLayout(m_Device, &pipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to create pipeline layout!");
+        }
+
+        // Upscale
+        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+        samplerLayoutBinding.binding = 0;
+        samplerLayoutBinding.descriptorCount = 1;
+        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo upscaleLayoutInfo{};
+        upscaleLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        upscaleLayoutInfo.bindingCount = 1;
+        upscaleLayoutInfo.pBindings = &samplerLayoutBinding;
+
+        if (vkCreateDescriptorSetLayout(m_Device, &upscaleLayoutInfo, nullptr, &m_UpscaleDescriptorSetLayout) != VK_SUCCESS) {
+            PX_CORE_CRITICAL("Failed to create upscale descriptor set layout!");
+        }
+
+        VkPipelineLayoutCreateInfo upscalePipelineLayoutInfo{};
+        upscalePipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+        upscalePipelineLayoutInfo.setLayoutCount = 1;
+        upscalePipelineLayoutInfo.pSetLayouts = &m_UpscaleDescriptorSetLayout;
+
+        if (vkCreatePipelineLayout(m_Device, &upscalePipelineLayoutInfo, nullptr, &m_UpscalePipelineLayout) != VK_SUCCESS) {
+            PX_CORE_CRITICAL("Failed to create upscale pipeline layout!");
         }
     }
 
     void VulkanContext::CreateUniformBuffers() {
         VkDeviceSize bufferSize = sizeof(GlobalUBO);
-
         m_UniformBuffers.resize(m_SwapchainImages.size());
-
         for (size_t i = 0; i < m_SwapchainImages.size(); i++) {
-            m_UniformBuffers[i] = std::make_unique<Buffer>(
-                *this,
-                bufferSize,
-                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
-                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-            );
+            m_UniformBuffers[i] = std::make_unique<Buffer>(*this, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
             m_UniformBuffers[i]->Map();
         }
     }
 
     void VulkanContext::CreateDescriptorSets() {
+        // UBO sets
         std::vector<VkDescriptorSetLayout> layouts(m_SwapchainImages.size(), m_DescriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -680,9 +679,7 @@ namespace PixelEngine {
         allocInfo.pSetLayouts = layouts.data();
 
         m_DescriptorSets.resize(m_SwapchainImages.size());
-        if (vkAllocateDescriptorSets(m_Device, &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS) {
-            PX_CORE_CRITICAL("Failed to allocate descriptor sets!");
-        }
+        vkAllocateDescriptorSets(m_Device, &allocInfo, m_DescriptorSets.data());
 
         for (size_t i = 0; i < m_SwapchainImages.size(); i++) {
             VkDescriptorBufferInfo bufferInfo{};
@@ -694,10 +691,39 @@ namespace PixelEngine {
             descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
             descriptorWrite.dstSet = m_DescriptorSets[i];
             descriptorWrite.dstBinding = 0;
-            descriptorWrite.dstArrayElement = 0;
             descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
             descriptorWrite.descriptorCount = 1;
             descriptorWrite.pBufferInfo = &bufferInfo;
+            vkUpdateDescriptorSets(m_Device, 1, &descriptorWrite, 0, nullptr);
+        }
+
+        // Upscale sets (will be updated by App once OffscreenTarget is ready)
+        std::vector<VkDescriptorSetLayout> upscaleLayouts(m_SwapchainImages.size(), m_UpscaleDescriptorSetLayout);
+        VkDescriptorSetAllocateInfo upscaleAllocInfo{};
+        upscaleAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        upscaleAllocInfo.descriptorPool = m_DescriptorPool;
+        upscaleAllocInfo.descriptorSetCount = static_cast<uint32_t>(m_SwapchainImages.size());
+        upscaleAllocInfo.pSetLayouts = upscaleLayouts.data();
+
+        m_UpscaleDescriptorSets.resize(m_SwapchainImages.size());
+        vkAllocateDescriptorSets(m_Device, &upscaleAllocInfo, m_UpscaleDescriptorSets.data());
+    }
+
+    void VulkanContext::UpdateUpscaleDescriptorSets(VkImageView colorImageView) {
+        for (size_t i = 0; i < m_SwapchainImages.size(); i++) {
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageInfo.imageView = colorImageView;
+            imageInfo.sampler = m_TextureSampler;
+
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = m_UpscaleDescriptorSets[i];
+            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pImageInfo = &imageInfo;
 
             vkUpdateDescriptorSets(m_Device, 1, &descriptorWrite, 0, nullptr);
         }
@@ -705,66 +731,45 @@ namespace PixelEngine {
 
     uint32_t VulkanContext::AcquireNextImage(VkSemaphore signalSemaphore) {
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(m_Device, m_Swapchain, UINT64_MAX, signalSemaphore, VK_NULL_HANDLE, &imageIndex);
-
-        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-            return 0;
-        } else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
-            PX_CORE_CRITICAL("Failed to acquire swapchain image!");
-        }
-
+        if (vkAcquireNextImageKHR(m_Device, m_Swapchain, UINT64_MAX, signalSemaphore, VK_NULL_HANDLE, &imageIndex) == VK_ERROR_OUT_OF_DATE_KHR) return 0;
         return imageIndex;
     }
 
     void VulkanContext::SubmitCommandBuffer(uint32_t imageIndex, VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence fence) {
         VkSubmitInfo submitInfo{};
         submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
-
         VkSemaphore waitSemaphores[] = { waitSemaphore };
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
         submitInfo.waitSemaphoreCount = 1;
         submitInfo.pWaitSemaphores = waitSemaphores;
         submitInfo.pWaitDstStageMask = waitStages;
-
         submitInfo.commandBufferCount = 1;
         submitInfo.pCommandBuffers = &m_CommandBuffers[imageIndex];
-
         VkSemaphore signalSemaphores[] = { signalSemaphore };
         submitInfo.signalSemaphoreCount = 1;
         submitInfo.pSignalSemaphores = signalSemaphores;
-
-        if (vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, fence) != VK_SUCCESS) {
-            PX_CORE_CRITICAL("Failed to submit draw command buffer!");
-        }
+        vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, fence);
     }
 
     void VulkanContext::PresentImage(uint32_t imageIndex, VkSemaphore waitSemaphore) {
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
-
         VkSemaphore waitSemaphores[] = { waitSemaphore };
         presentInfo.waitSemaphoreCount = 1;
         presentInfo.pWaitSemaphores = waitSemaphores;
-
         VkSwapchainKHR swapchains[] = { m_Swapchain };
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapchains;
         presentInfo.pImageIndices = &imageIndex;
-
         vkQueuePresentKHR(m_GraphicsQueue, &presentInfo);
     }
 
     uint32_t VulkanContext::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
         VkPhysicalDeviceMemoryProperties memProperties;
         vkGetPhysicalDeviceMemoryProperties(m_PhysicalDevice, &memProperties);
-
         for (uint32_t i = 0; i < memProperties.memoryTypeCount; i++) {
-            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) {
-                return i;
-            }
+            if ((typeFilter & (1 << i)) && (memProperties.memoryTypes[i].propertyFlags & properties) == properties) return i;
         }
-
-        PX_CORE_CRITICAL("Failed to find suitable memory type!");
         return 0;
     }
 
@@ -772,24 +777,50 @@ namespace PixelEngine {
         for (VkFormat format : candidates) {
             VkFormatProperties props;
             vkGetPhysicalDeviceFormatProperties(m_PhysicalDevice, format, &props);
-
-            if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) {
-                return format;
-            } else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) {
-                return format;
-            }
+            if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features) return format;
+            else if (tiling == VK_IMAGE_TILING_OPTIMAL && (props.optimalTilingFeatures & features) == features) return format;
         }
-
-        PX_CORE_CRITICAL("Failed to find supported format!");
         return VK_FORMAT_UNDEFINED;
     }
 
     VkFormat VulkanContext::FindDepthFormat() {
-        return FindSupportedFormat(
-            {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
-            VK_IMAGE_TILING_OPTIMAL,
-            VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT
-        );
+        return FindSupportedFormat({VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT}, VK_IMAGE_TILING_OPTIMAL, VK_FORMAT_FEATURE_DEPTH_STENCIL_ATTACHMENT_BIT);
+    }
+
+    void VulkanContext::CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) {
+        VkImageCreateInfo imageInfo{};
+        imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+        imageInfo.imageType = VK_IMAGE_TYPE_2D;
+        imageInfo.extent = { width, height, 1 };
+        imageInfo.mipLevels = 1;
+        imageInfo.arrayLayers = 1;
+        imageInfo.format = format;
+        imageInfo.tiling = tiling;
+        imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        imageInfo.usage = usage;
+        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        vkCreateImage(m_Device, &imageInfo, nullptr, &image);
+        VkMemoryRequirements memReqs;
+        vkGetImageMemoryRequirements(m_Device, image, &memReqs);
+        VkMemoryAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+        allocInfo.allocationSize = memReqs.size;
+        allocInfo.memoryTypeIndex = FindMemoryType(memReqs.memoryTypeBits, properties);
+        vkAllocateMemory(m_Device, &allocInfo, nullptr, &imageMemory);
+        vkBindImageMemory(m_Device, image, imageMemory, 0);
+    }
+
+    VkImageView VulkanContext::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) {
+        VkImageViewCreateInfo viewInfo{};
+        viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+        viewInfo.image = image;
+        viewInfo.viewType = VK_IMAGE_VIEW_TYPE_2D;
+        viewInfo.format = format;
+        viewInfo.subresourceRange = { aspectFlags, 0, 1, 0, 1 };
+        VkImageView imageView;
+        vkCreateImageView(m_Device, &viewInfo, nullptr, &imageView);
+        return imageView;
     }
 
     bool VulkanContext::CheckValidationLayerSupport() {
@@ -797,14 +828,10 @@ namespace PixelEngine {
         vkEnumerateInstanceLayerProperties(&layerCount, nullptr);
         std::vector<VkLayerProperties> availableLayers(layerCount);
         vkEnumerateInstanceLayerProperties(&layerCount, availableLayers.data());
-
         for (const char* layerName : m_ValidationLayers) {
             bool layerFound = false;
             for (const auto& layerProperties : availableLayers) {
-                if (strcmp(layerName, layerProperties.layerName) == 0) {
-                    layerFound = true;
-                    break;
-                }
+                if (strcmp(layerName, layerProperties.layerName) == 0) { layerFound = true; break; }
             }
             if (!layerFound) return false;
         }
@@ -812,16 +839,11 @@ namespace PixelEngine {
     }
 
     std::vector<const char*> VulkanContext::GetRequiredExtensions() {
-        uint32_t sdlExtensionCount = 0;
-        const char* const* sdlExtensions = SDL_Vulkan_GetInstanceExtensions(&sdlExtensionCount);
-
-        std::vector<const char*> extensions(sdlExtensions, sdlExtensions + sdlExtensionCount);
-
-        if (m_EnableValidationLayers) {
-            extensions.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
-        }
-
-        return extensions;
+        uint32_t sdlExtCount = 0;
+        const char* const* sdlExts = SDL_Vulkan_GetInstanceExtensions(&sdlExtCount);
+        std::vector<const char*> exts(sdlExts, sdlExts + sdlExtCount);
+        if (m_EnableValidationLayers) exts.push_back(VK_EXT_DEBUG_UTILS_EXTENSION_NAME);
+        return exts;
     }
 
 }
