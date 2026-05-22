@@ -27,8 +27,16 @@ public:
 };
 
 int main(int argc, char* argv[]) {
-    SandboxApp* app = new SandboxApp();
-    app->Run();
-    delete app;
+    try {
+        SandboxApp* app = new SandboxApp();
+        app->Run();
+        delete app;
+    } catch (const std::exception& e) {
+        PX_CORE_CRITICAL("Unhandled Exception: {0}", e.what());
+        return 1;
+    } catch (...) {
+        PX_CORE_CRITICAL("Unknown Exception occurred!");
+        return 1;
+    }
     return 0;
 }
