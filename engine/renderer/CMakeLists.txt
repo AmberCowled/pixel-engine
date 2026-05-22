@@ -5,6 +5,7 @@ add_library(engine-renderer STATIC
     Buffer.hpp
     Buffer.cpp
     Vertex.hpp
+    UBO.hpp
     
     # ImGui Core
     ${imgui_SOURCE_DIR}/imgui.cpp
