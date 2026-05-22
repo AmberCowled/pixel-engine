@@ -1,5 +1,6 @@
 #include "VulkanContext.hpp"
 #include <engine/base/Log.hpp>
+#include <engine/renderer/UBO.hpp>
 #include <SDL3/SDL_vulkan.h>
 #include <set>
 #include <string>
@@ -42,6 +43,10 @@ namespace PixelEngine {
         CreateFramebuffers();
         CreateCommandPool();
         CreateCommandBuffers();
+        CreateDescriptorPool();
+        CreateDescriptorSetLayout();
+        CreateUniformBuffers();
+        CreateDescriptorSets();
 
         PX_CORE_INFO("Vulkan Context Initialized.");
     }
@@ -51,6 +56,18 @@ namespace PixelEngine {
             vkDeviceWaitIdle(m_Device);
             
             CleanupSwapchain();
+
+            if (m_DescriptorPool != VK_NULL_HANDLE) {
+                vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
+                m_DescriptorPool = VK_NULL_HANDLE;
+            }
+
+            if (m_DescriptorSetLayout != VK_NULL_HANDLE) {
+                vkDestroyDescriptorSetLayout(m_Device, m_DescriptorSetLayout, nullptr);
+                m_DescriptorSetLayout = VK_NULL_HANDLE;
+            }
+
+            m_UniformBuffers.clear();
 
             if (m_CommandPool != VK_NULL_HANDLE) {
                 vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
@@ -515,6 +532,88 @@ namespace PixelEngine {
 
         if (vkAllocateCommandBuffers(m_Device, &allocInfo, m_CommandBuffers.data()) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to allocate command buffers!");
+        }
+    }
+
+    void VulkanContext::CreateDescriptorPool() {
+        VkDescriptorPoolSize poolSize{};
+        poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        poolSize.descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
+
+        VkDescriptorPoolCreateInfo poolInfo{};
+        poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+        poolInfo.poolSizeCount = 1;
+        poolInfo.pPoolSizes = &poolSize;
+        poolInfo.maxSets = static_cast<uint32_t>(m_SwapchainImages.size());
+
+        if (vkCreateDescriptorPool(m_Device, &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS) {
+            PX_CORE_CRITICAL("Failed to create descriptor pool!");
+        }
+    }
+
+    void VulkanContext::CreateDescriptorSetLayout() {
+        VkDescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        uboLayoutBinding.pImmutableSamplers = nullptr;
+
+        VkDescriptorSetLayoutCreateInfo layoutInfo{};
+        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        layoutInfo.bindingCount = 1;
+        layoutInfo.pBindings = &uboLayoutBinding;
+
+        if (vkCreateDescriptorSetLayout(m_Device, &layoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS) {
+            PX_CORE_CRITICAL("Failed to create descriptor set layout!");
+        }
+    }
+
+    void VulkanContext::CreateUniformBuffers() {
+        VkDeviceSize bufferSize = sizeof(GlobalUBO);
+
+        m_UniformBuffers.resize(m_SwapchainImages.size());
+
+        for (size_t i = 0; i < m_SwapchainImages.size(); i++) {
+            m_UniformBuffers[i] = std::make_unique<Buffer>(
+                *this,
+                bufferSize,
+                VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT,
+                VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
+            );
+            m_UniformBuffers[i]->Map();
+        }
+    }
+
+    void VulkanContext::CreateDescriptorSets() {
+        std::vector<VkDescriptorSetLayout> layouts(m_SwapchainImages.size(), m_DescriptorSetLayout);
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = m_DescriptorPool;
+        allocInfo.descriptorSetCount = static_cast<uint32_t>(m_SwapchainImages.size());
+        allocInfo.pSetLayouts = layouts.data();
+
+        m_DescriptorSets.resize(m_SwapchainImages.size());
+        if (vkAllocateDescriptorSets(m_Device, &allocInfo, m_DescriptorSets.data()) != VK_SUCCESS) {
+            PX_CORE_CRITICAL("Failed to allocate descriptor sets!");
+        }
+
+        for (size_t i = 0; i < m_SwapchainImages.size(); i++) {
+            VkDescriptorBufferInfo bufferInfo{};
+            bufferInfo.buffer = m_UniformBuffers[i]->GetBuffer();
+            bufferInfo.offset = 0;
+            bufferInfo.range = sizeof(GlobalUBO);
+
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = m_DescriptorSets[i];
+            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pBufferInfo = &bufferInfo;
+
+            vkUpdateDescriptorSets(m_Device, 1, &descriptorWrite, 0, nullptr);
         }
     }
 

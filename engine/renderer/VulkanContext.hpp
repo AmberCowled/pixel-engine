@@ -2,6 +2,8 @@
 
 #include <vulkan/vulkan.h>
 #include <vector>
+#include <memory>
+#include "Buffer.hpp"
 
 struct SDL_Window;
 
@@ -28,6 +30,9 @@ namespace PixelEngine {
         VkFramebuffer GetFramebuffer(uint32_t index) const { return m_SwapchainFramebuffers[index]; }
         VkCommandPool GetCommandPool() const { return m_CommandPool; }
         VkCommandBuffer GetCommandBuffer(uint32_t index) const { return m_CommandBuffers[index]; }
+        VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_DescriptorSetLayout; }
+        VkDescriptorSet GetDescriptorSet(uint32_t index) const { return m_DescriptorSets[index]; }
+        Buffer& GetUniformBuffer(uint32_t index) { return *m_UniformBuffers[index]; }
 
         uint32_t AcquireNextImage(VkSemaphore signalSemaphore);
         void SubmitCommandBuffer(uint32_t imageIndex, VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence fence);
@@ -49,6 +54,10 @@ namespace PixelEngine {
         void CreateFramebuffers();
         void CreateCommandPool();
         void CreateCommandBuffers();
+        void CreateDescriptorPool();
+        void CreateDescriptorSetLayout();
+        void CreateUniformBuffers();
+        void CreateDescriptorSets();
         void CreateSyncObjects();
 
         void CleanupSwapchain();
@@ -90,6 +99,12 @@ namespace PixelEngine {
 
         VkCommandPool m_CommandPool = VK_NULL_HANDLE;
         std::vector<VkCommandBuffer> m_CommandBuffers;
+
+        // Descriptors
+        VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
+        std::vector<std::unique_ptr<Buffer>> m_UniformBuffers;
+        std::vector<VkDescriptorSet> m_DescriptorSets;
 
         const std::vector<const char*> m_ValidationLayers = {
             "VK_LAYER_KHRONOS_validation"
