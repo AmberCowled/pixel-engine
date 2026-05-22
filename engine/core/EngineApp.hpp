@@ -5,6 +5,7 @@
 #include <vector>
 #include <SDL3/SDL.h>
 #include <vulkan/vulkan.h>
+#include <glm/glm.hpp>
 
 namespace PixelEngine {
 
@@ -43,8 +44,14 @@ namespace PixelEngine {
         void ProcessEvents();
         void InitImGui();
         void ShutdownImGui();
+        
+    public:
         void BeginFrame();
         void EndFrame();
+
+        // Manual render pass control for multi-pass setups
+        void BeginSwapChainRenderPass(VkCommandBuffer commandBuffer, uint32_t imageIndex, glm::vec4 clearColor = {0.1f, 0.1f, 0.1f, 1.0f});
+        void EndSwapChainRenderPass(VkCommandBuffer commandBuffer);
 
     private:
         VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE;
