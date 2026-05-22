@@ -20,6 +20,7 @@ set(CMAKE_ARCHIVE_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/lib)
 # Subdirectories
 add_subdirectory(engine)
 add_subdirectory(sandbox)
+add_subdirectory(shaders)
 
 # Project-wide include directory
 target_include_directories(engine-base INTERFACE ${CMAKE_CURRENT_SOURCE_DIR})
