@@ -195,7 +195,6 @@ namespace PixelEngine {
         static uint32_t acquireSemIndex = 0;
         m_ImageIndex = m_VulkanContext->AcquireNextImage(m_ImageAvailableSemaphores[acquireSemIndex]);
         
-        // The acquisition semaphore must be the same one used in submit
         m_CurrentAcquireSemIndex = acquireSemIndex;
         acquireSemIndex = (acquireSemIndex + 1) % MAX_SWAPCHAIN_IMAGES;
 
@@ -206,25 +205,31 @@ namespace PixelEngine {
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
 
+        ImGui_ImplVulkan_NewFrame();
+        ImGui_ImplSDL3_NewFrame();
+        ImGui::NewFrame();
+    }
+
+    void EngineApp::BeginSwapChainRenderPass(VkCommandBuffer commandBuffer, uint32_t imageIndex, glm::vec4 clearColor) {
         VkRenderPassBeginInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
         renderPassInfo.renderPass = m_VulkanContext->GetRenderPass();
-        renderPassInfo.framebuffer = m_VulkanContext->GetFramebuffer(m_ImageIndex);
+        renderPassInfo.framebuffer = m_VulkanContext->GetFramebuffer(imageIndex);
         renderPassInfo.renderArea.offset = {0, 0};
         renderPassInfo.renderArea.extent = m_VulkanContext->GetSwapchainExtent();
 
         std::array<VkClearValue, 2> clearValues{};
-        clearValues[0].color = {{0.1f, 0.1f, 0.1f, 1.0f}};
+        clearValues[0].color = {{clearColor.r, clearColor.g, clearColor.b, clearColor.a}};
         clearValues[1].depthStencil = {1.0f, 0};
 
         renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
         renderPassInfo.pClearValues = clearValues.data();
 
         vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+    }
 
-        ImGui_ImplVulkan_NewFrame();
-        ImGui_ImplSDL3_NewFrame();
-        ImGui::NewFrame();
+    void EngineApp::EndSwapChainRenderPass(VkCommandBuffer commandBuffer) {
+        vkCmdEndRenderPass(commandBuffer);
     }
 
     void EngineApp::EndFrame() {
@@ -232,12 +237,12 @@ namespace PixelEngine {
         
         VkCommandBuffer commandBuffer = m_VulkanContext->GetCommandBuffer(m_ImageIndex);
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
-
+        
         vkCmdEndRenderPass(commandBuffer);
         vkEndCommandBuffer(commandBuffer);
 
-        m_VulkanContext->SubmitCommandBuffer(m_ImageIndex, m_ImageAvailableSemaphores[m_CurrentAcquireSemIndex], m_RenderFinishedSemaphores[m_CurrentFrame], m_InFlightFences[m_CurrentFrame]);
-        m_VulkanContext->PresentImage(m_ImageIndex, m_RenderFinishedSemaphores[m_CurrentFrame]);
+        m_VulkanContext->SubmitCommandBuffer(m_ImageIndex, m_ImageAvailableSemaphores[m_CurrentAcquireSemIndex], m_RenderFinishedSemaphores[m_ImageIndex], m_InFlightFences[m_CurrentFrame]);
+        m_VulkanContext->PresentImage(m_ImageIndex, m_RenderFinishedSemaphores[m_ImageIndex]);
 
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }
