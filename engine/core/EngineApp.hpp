@@ -34,6 +34,10 @@ namespace PixelEngine {
         virtual void OnRender() {}
         virtual void OnEvent(SDL_Event& event) {}
 
+        // Manual render pass control for multi-pass setups
+        void BeginSwapChainRenderPass(VkCommandBuffer commandBuffer, uint32_t imageIndex, glm::vec4 clearColor = {0.1f, 0.1f, 0.1f, 1.0f});
+        void EndSwapChainRenderPass(VkCommandBuffer commandBuffer);
+
     protected:
         bool m_Running = true;
         SDL_Window* m_Window = nullptr;
@@ -48,10 +52,6 @@ namespace PixelEngine {
     public:
         void BeginFrame();
         void EndFrame();
-
-        // Manual render pass control for multi-pass setups
-        void BeginSwapChainRenderPass(VkCommandBuffer commandBuffer, uint32_t imageIndex, glm::vec4 clearColor = {0.1f, 0.1f, 0.1f, 1.0f});
-        void EndSwapChainRenderPass(VkCommandBuffer commandBuffer);
 
     private:
         VkDescriptorPool m_ImGuiDescriptorPool = VK_NULL_HANDLE;

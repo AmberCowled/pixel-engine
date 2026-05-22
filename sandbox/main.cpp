@@ -13,6 +13,7 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 #include <iostream>
+#include <array>
 
 class SandboxApp : public PixelEngine::EngineApp {
 public:
@@ -21,7 +22,7 @@ public:
         
         auto& context = GetVulkanContext();
 
-        // Create Offscreen Target (320x180)
+        // 1. Create Offscreen Target (320x180)
         PixelEngine::OffscreenTargetConfig offscreenConfig{};
         offscreenConfig.width = 320;
         offscreenConfig.height = 180;
@@ -36,80 +37,66 @@ public:
             context, offscreenConfig, context.GetOffscreenRenderPass()
         );
 
-        // Update Upscale Descriptor Sets with the offscreen image
+        // 2. Link Offscreen Target to Upscale pipeline
         context.UpdateUpscaleDescriptorSets(m_OffscreenTarget->GetColorImageView());
 
-        // Create Vertex Buffer (Cube)
+        // 3. Create Geometry Buffers
+        // Cube
         VkDeviceSize vertexBufferSize = sizeof(PixelEngine::CUBE_VERTICES[0]) * PixelEngine::CUBE_VERTICES.size();
         m_VertexBuffer = std::make_unique<PixelEngine::Buffer>(
-            context,
-            vertexBufferSize,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            context, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
         m_VertexBuffer->Map();
         m_VertexBuffer->WriteToBuffer((void*)PixelEngine::CUBE_VERTICES.data(), vertexBufferSize);
 
-        // Create Index Buffer (Cube)
         VkDeviceSize indexBufferSize = sizeof(PixelEngine::CUBE_INDICES[0]) * PixelEngine::CUBE_INDICES.size();
         m_IndexBuffer = std::make_unique<PixelEngine::Buffer>(
-            context,
-            indexBufferSize,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            context, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
         m_IndexBuffer->Map();
         m_IndexBuffer->WriteToBuffer((void*)PixelEngine::CUBE_INDICES.data(), indexBufferSize);
 
-        // Create Vertex Buffer (Quad)
-        VkDeviceSize quadVertexBufferSize = sizeof(PixelEngine::FULLSCREEN_QUAD_VERTICES[0]) * PixelEngine::FULLSCREEN_QUAD_VERTICES.size();
+        // Fullscreen Triangle
+        VkDeviceSize quadVertexBufferSize = sizeof(PixelEngine::FULLSCREEN_TRIANGLE_VERTICES[0]) * PixelEngine::FULLSCREEN_TRIANGLE_VERTICES.size();
         m_QuadVertexBuffer = std::make_unique<PixelEngine::Buffer>(
-            context,
-            quadVertexBufferSize,
-            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+            context, quadVertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
         m_QuadVertexBuffer->Map();
-        m_QuadVertexBuffer->WriteToBuffer((void*)PixelEngine::FULLSCREEN_QUAD_VERTICES.data(), quadVertexBufferSize);
+        m_QuadVertexBuffer->WriteToBuffer((void*)PixelEngine::FULLSCREEN_TRIANGLE_VERTICES.data(), quadVertexBufferSize);
 
-        // Create Index Buffer (Quad)
-        VkDeviceSize quadIndexBufferSize = sizeof(PixelEngine::FULLSCREEN_QUAD_INDICES[0]) * PixelEngine::FULLSCREEN_QUAD_INDICES.size();
+        VkDeviceSize quadIndexBufferSize = sizeof(PixelEngine::FULLSCREEN_TRIANGLE_INDICES[0]) * PixelEngine::FULLSCREEN_TRIANGLE_INDICES.size();
         m_QuadIndexBuffer = std::make_unique<PixelEngine::Buffer>(
-            context,
-            quadIndexBufferSize,
-            VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+            context, quadIndexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
         m_QuadIndexBuffer->Map();
-        m_QuadIndexBuffer->WriteToBuffer((void*)PixelEngine::FULLSCREEN_QUAD_INDICES.data(), quadIndexBufferSize);
+        m_QuadIndexBuffer->WriteToBuffer((void*)PixelEngine::FULLSCREEN_TRIANGLE_INDICES.data(), quadIndexBufferSize);
 
-        // Create 3D Pipeline
+        // 4. Create Pipelines
+        // 3D Pipeline
         PixelEngine::PipelineConfigInfo pipelineConfig{};
         PixelEngine::GraphicsPipeline::DefaultPipelineConfigInfo(pipelineConfig);
         pipelineConfig.renderPass = context.GetOffscreenRenderPass();
         pipelineConfig.pipelineLayout = context.GetPipelineLayout();
         
         m_Pipeline = std::make_unique<PixelEngine::GraphicsPipeline>(
-            context,
-            "../shaders/simple.vert.spv",
-            "../shaders/simple.frag.spv",
-            pipelineConfig
+            context, "../shaders/simple.vert.spv", "../shaders/simple.frag.spv", pipelineConfig
         );
 
-        // Create Upscale Pipeline
+        // Upscale Pipeline
         PixelEngine::PipelineConfigInfo upscaleConfig{};
         PixelEngine::GraphicsPipeline::DefaultPipelineConfigInfo(upscaleConfig);
         upscaleConfig.renderPass = context.GetRenderPass();
         upscaleConfig.pipelineLayout = context.GetUpscalePipelineLayout();
-        // Depth test not needed for upscale quad
         upscaleConfig.depthStencilInfo.depthTestEnable = VK_FALSE;
         upscaleConfig.depthStencilInfo.depthWriteEnable = VK_FALSE;
+        upscaleConfig.rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
 
         m_UpscalePipeline = std::make_unique<PixelEngine::GraphicsPipeline>(
-            context,
-            "../shaders/upscale.vert.spv",
-            "../shaders/upscale.frag.spv",
-            upscaleConfig
+            context, "../shaders/upscale.vert.spv", "../shaders/upscale.frag.spv", upscaleConfig
         );
     }
 
@@ -120,8 +107,9 @@ public:
     void OnUpdate(float deltaTime) override {
         m_Rotation += deltaTime * 50.0f;
 
+        auto& context = GetVulkanContext();
+        
         // Update Camera
-        auto extent = GetVulkanContext().GetSwapchainExtent();
         m_Camera.SetPerspectiveProjection(glm::radians(45.0f), m_OffscreenTarget->GetWidth() / (float)m_OffscreenTarget->GetHeight(), 0.1f, 10.0f);
         m_Camera.SetViewTarget(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f));
 
@@ -130,19 +118,24 @@ public:
         ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(m_Rotation), glm::vec3(0.5f, 1.0f, 0.0f));
         ubo.view = m_Camera.GetView();
         ubo.proj = m_Camera.GetProjection();
+        ubo.resolution = glm::vec2(m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight());
 
-        GetVulkanContext().GetUniformBuffer(GetCurrentFrameIndex()).WriteToBuffer(&ubo, sizeof(ubo));
+        for (size_t i = 0; i < context.GetSwapchainImageCount(); i++) {
+            context.GetUniformBuffer((uint32_t)i).WriteToBuffer(&ubo, sizeof(ubo));
+        }
 
         // UI
         ImGui::Begin("Engine Status");
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("DeltaTime: %.3f ms", deltaTime * 1000.0f);
+        ImGui::Text("Internal Res: %d x %d", m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight());
         ImGui::End();
 
         ImGui::ShowDemoWindow();
     }
 
     void OnRender() override {
+        uint32_t imageIndex = GetCurrentImageIndex();
         VkCommandBuffer commandBuffer = GetCurrentCommandBuffer();
         auto& context = GetVulkanContext();
 
@@ -185,7 +178,7 @@ public:
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
             vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer->GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
 
-            VkDescriptorSet descriptorSet = context.GetDescriptorSet(GetCurrentFrameIndex());
+            VkDescriptorSet descriptorSet = context.GetDescriptorSet(imageIndex);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context.GetPipelineLayout(), 0, 1, &descriptorSet, 0, nullptr);
 
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(PixelEngine::CUBE_INDICES.size()), 1, 0, 0, 0);
@@ -195,7 +188,7 @@ public:
 
         // Pass 2: Upscale to Swapchain (includes UI)
         {
-            BeginSwapChainRenderPass(commandBuffer, GetCurrentImageIndex(), {0,0,0,1});
+            this->BeginSwapChainRenderPass(commandBuffer, imageIndex, {0.0f, 0.0f, 0.0f, 1.0f});
 
             auto extent = context.GetSwapchainExtent();
             VkViewport viewport{};
@@ -219,10 +212,10 @@ public:
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
             vkCmdBindIndexBuffer(commandBuffer, m_QuadIndexBuffer->GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
 
-            VkDescriptorSet upscaleDescriptorSet = context.GetUpscaleDescriptorSet(GetCurrentFrameIndex());
+            VkDescriptorSet upscaleDescriptorSet = context.GetUpscaleDescriptorSet(imageIndex);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context.GetUpscalePipelineLayout(), 0, 1, &upscaleDescriptorSet, 0, nullptr);
 
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(PixelEngine::FULLSCREEN_QUAD_INDICES.size()), 1, 0, 0, 0);
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(PixelEngine::FULLSCREEN_TRIANGLE_INDICES.size()), 1, 0, 0, 0);
 
             // ImGui will be rendered here by EngineApp which will also end the pass
         }

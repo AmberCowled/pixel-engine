@@ -236,9 +236,14 @@ namespace PixelEngine {
         ImGui::Render();
         
         VkCommandBuffer commandBuffer = m_VulkanContext->GetCommandBuffer(m_ImageIndex);
+        
+        // ImGui rendering must happen within the active render pass
         ImGui_ImplVulkan_RenderDrawData(ImGui::GetDrawData(), commandBuffer);
         
+        // End the active render pass
         vkCmdEndRenderPass(commandBuffer);
+        
+        // Now it's safe to end the command buffer
         vkEndCommandBuffer(commandBuffer);
 
         m_VulkanContext->SubmitCommandBuffer(m_ImageIndex, m_ImageAvailableSemaphores[m_CurrentAcquireSemIndex], m_RenderFinishedSemaphores[m_ImageIndex], m_InFlightFences[m_CurrentFrame]);
