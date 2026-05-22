@@ -2,6 +2,9 @@
 add_library(engine-renderer STATIC
     VulkanContext.hpp
     VulkanContext.cpp
+    Buffer.hpp
+    Buffer.cpp
+    Vertex.hpp
     
     # ImGui Core
     ${imgui_SOURCE_DIR}/imgui.cpp
