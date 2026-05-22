@@ -31,9 +31,14 @@ namespace PixelEngine {
         VkFramebuffer GetFramebuffer(uint32_t index) const { return m_SwapchainFramebuffers[index]; }
         VkCommandPool GetCommandPool() const { return m_CommandPool; }
         VkCommandBuffer GetCommandBuffer(uint32_t index) const { return m_CommandBuffers[index]; }
+        
         VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_DescriptorSetLayout; }
+        VkDescriptorSetLayout GetUpscaleDescriptorSetLayout() const { return m_UpscaleDescriptorSetLayout; }
         VkDescriptorSet GetDescriptorSet(uint32_t index) const { return m_DescriptorSets[index]; }
+        VkDescriptorSet GetUpscaleDescriptorSet(uint32_t index) const { return m_UpscaleDescriptorSets[index]; }
         VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
+        VkPipelineLayout GetUpscalePipelineLayout() const { return m_UpscalePipelineLayout; }
+        VkSampler GetTextureSampler() const { return m_TextureSampler; }
         Buffer& GetUniformBuffer(uint32_t index) { return *m_UniformBuffers[index]; }
 
         uint32_t AcquireNextImage(VkSemaphore signalSemaphore);
@@ -64,6 +69,8 @@ namespace PixelEngine {
         void CreateDescriptorSetLayout();
         void CreateUniformBuffers();
         void CreateDescriptorSets();
+        void UpdateUpscaleDescriptorSets(VkImageView colorImageView);
+        void CreateTextureSampler();
         void CreateSyncObjects();
 
         void CleanupSwapchain();
@@ -109,10 +116,18 @@ namespace PixelEngine {
 
         // Descriptors
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
+        
         VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
-        std::vector<std::unique_ptr<Buffer>> m_UniformBuffers;
         std::vector<VkDescriptorSet> m_DescriptorSets;
+
+        VkDescriptorSetLayout m_UpscaleDescriptorSetLayout = VK_NULL_HANDLE;
+        VkPipelineLayout m_UpscalePipelineLayout = VK_NULL_HANDLE;
+        std::vector<VkDescriptorSet> m_UpscaleDescriptorSets;
+
+        VkSampler m_TextureSampler = VK_NULL_HANDLE;
+
+        std::vector<std::unique_ptr<Buffer>> m_UniformBuffers;
 
         const std::vector<const char*> m_ValidationLayers = {
             "VK_LAYER_KHRONOS_validation"

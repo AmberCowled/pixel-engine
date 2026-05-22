@@ -48,12 +48,12 @@ namespace PixelEngine {
             if (vkCreateSemaphore(m_VulkanContext->GetDevice(), &semaphoreInfo, nullptr, &m_ImageAvailableSemaphores[i]) != VK_SUCCESS) {
                 PX_CORE_CRITICAL("Failed to create acquisition semaphore {0}", i);
             }
-        }
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             if (vkCreateSemaphore(m_VulkanContext->GetDevice(), &semaphoreInfo, nullptr, &m_RenderFinishedSemaphores[i]) != VK_SUCCESS) {
                 PX_CORE_CRITICAL("Failed to create render finished semaphore {0}", i);
             }
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
             if (vkCreateFence(m_VulkanContext->GetDevice(), &fenceInfo, nullptr, &m_InFlightFences[i]) != VK_SUCCESS) {
                 PX_CORE_CRITICAL("Failed to create in-flight fence {0}", i);
             }
@@ -69,10 +69,10 @@ namespace PixelEngine {
 
         for (size_t i = 0; i < MAX_SWAPCHAIN_IMAGES; i++) {
             vkDestroySemaphore(m_VulkanContext->GetDevice(), m_ImageAvailableSemaphores[i], nullptr);
+            vkDestroySemaphore(m_VulkanContext->GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
         }
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++) {
-            vkDestroySemaphore(m_VulkanContext->GetDevice(), m_RenderFinishedSemaphores[i], nullptr);
             vkDestroyFence(m_VulkanContext->GetDevice(), m_InFlightFences[i], nullptr);
         }
 

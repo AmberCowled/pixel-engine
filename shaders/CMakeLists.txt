@@ -3,6 +3,8 @@ find_package(Vulkan REQUIRED COMPONENTS glslc)
 set(SHADER_SOURCES
     simple.vert
     simple.frag
+    upscale.vert
+    upscale.frag
 )
 
 set(SPV_FILES "")
