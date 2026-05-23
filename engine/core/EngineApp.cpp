@@ -24,7 +24,7 @@ namespace PixelEngine {
             m_Config.Name.c_str(),
             m_Config.Width,
             m_Config.Height,
-            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
+            SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY
         );
 
         if (!m_Window) {
@@ -94,6 +94,14 @@ namespace PixelEngine {
             ProcessEvents();
 
             if (m_Running) {
+                int width = 0, height = 0;
+                SDL_GetWindowSizeInPixels(m_Window, &width, &height);
+                if (width == 0 || height == 0) {
+                    SDL_Delay(10);
+                    lastTime = SDL_GetTicks();
+                    continue;
+                }
+
                 BeginFrame();
                 
                 OnUpdate(deltaTime);
@@ -128,6 +136,16 @@ namespace PixelEngine {
             }
 
             if (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED && event.window.windowID == SDL_GetWindowID(m_Window)) {
+                m_FramebufferResized = true;
+            }
+
+            if (event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED && event.window.windowID == SDL_GetWindowID(m_Window)) {
+                float scale = SDL_GetWindowDisplayScale(m_Window);
+                ImGui::GetIO().FontGlobalScale = scale;
+                ImGuiStyle& style = ImGui::GetStyle();
+                style = ImGuiStyle();
+                ImGui::StyleColorsDark();
+                style.ScaleAllSizes(scale);
                 m_FramebufferResized = true;
             }
 
@@ -166,6 +184,10 @@ namespace PixelEngine {
 
         ImGui::StyleColorsDark();
 
+        float scale = SDL_GetWindowDisplayScale(m_Window);
+        io.FontGlobalScale = scale;
+        ImGui::GetStyle().ScaleAllSizes(scale);
+
         ImGui_ImplSDL3_InitForVulkan(m_Window);
         
         ImGui_ImplVulkan_InitInfo init_info = {};
@@ -193,8 +215,12 @@ namespace PixelEngine {
 
     void EngineApp::BeginFrame() {
         if (m_FramebufferResized) {
-            m_VulkanContext->RecreateSwapchain(m_Window);
-            m_FramebufferResized = false;
+            int width = 0, height = 0;
+            SDL_GetWindowSizeInPixels(m_Window, &width, &height);
+            if (width > 0 && height > 0) {
+                m_VulkanContext->RecreateSwapchain(m_Window);
+                m_FramebufferResized = false;
+            }
         }
 
         vkWaitForFences(m_VulkanContext->GetDevice(), 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
@@ -207,8 +233,12 @@ namespace PixelEngine {
         VkResult result = m_VulkanContext->AcquireNextImage(m_ImageAvailableSemaphores[acquireSemIndex], &m_ImageIndex);
         
         if (result == VK_ERROR_OUT_OF_DATE_KHR) {
-            m_VulkanContext->RecreateSwapchain(m_Window);
-            result = m_VulkanContext->AcquireNextImage(m_ImageAvailableSemaphores[acquireSemIndex], &m_ImageIndex);
+            int width = 0, height = 0;
+            SDL_GetWindowSizeInPixels(m_Window, &width, &height);
+            if (width > 0 && height > 0) {
+                m_VulkanContext->RecreateSwapchain(m_Window);
+                result = m_VulkanContext->AcquireNextImage(m_ImageAvailableSemaphores[acquireSemIndex], &m_ImageIndex);
+            }
         }
         
         if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
@@ -281,8 +311,14 @@ namespace PixelEngine {
         VkResult result = m_VulkanContext->PresentImage(m_ImageIndex, m_RenderFinishedSemaphores[m_ImageIndex]);
         
         if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_FramebufferResized) {
-            m_FramebufferResized = false;
-            m_VulkanContext->RecreateSwapchain(m_Window);
+            int width = 0, height = 0;
+            SDL_GetWindowSizeInPixels(m_Window, &width, &height);
+            if (width > 0 && height > 0) {
+                m_FramebufferResized = false;
+                m_VulkanContext->RecreateSwapchain(m_Window);
+            } else {
+                m_FramebufferResized = true;
+            }
         } else if (result != VK_SUCCESS) {
             PX_CORE_ERROR("Failed to present swapchain image!");
         }

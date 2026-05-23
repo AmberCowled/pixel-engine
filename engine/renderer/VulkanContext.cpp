@@ -561,9 +561,8 @@ namespace PixelEngine {
     void VulkanContext::RecreateSwapchain(SDL_Window* window) {
         int width = 0, height = 0;
         SDL_GetWindowSizeInPixels(window, &width, &height);
-        while (width == 0 || height == 0) {
-            SDL_GetWindowSizeInPixels(window, &width, &height);
-            SDL_Delay(1);
+        if (width == 0 || height == 0) {
+            return;
         }
 
         vkDeviceWaitIdle(m_Device);

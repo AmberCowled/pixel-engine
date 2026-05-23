@@ -21,6 +21,7 @@
 #include <engine/ecs/RenderSystem.hpp>
 #include <engine/ecs/SceneSerializer.hpp>
 #include <imgui.h>
+#include <imgui_internal.h>
 #include <imgui_impl_vulkan.h>
 #include <imgui_impl_sdl3.h>
 #include <ImGuizmo.h>
@@ -47,10 +48,11 @@ public:
         PixelEngine::ShaderHotReloader::Init("shaders");
         PixelEngine::AssetWatcher::Init("assets");
 
-        // 3. Create Offscreen Target (default size 1280x720)
+        // 3. Create Offscreen Target (default size 1280x720 scaled by DPI)
+        float dpiScale = SDL_GetWindowDisplayScale(m_Window);
         PixelEngine::OffscreenTargetConfig offscreenConfig{};
-        offscreenConfig.width = 1280;
-        offscreenConfig.height = 720;
+        offscreenConfig.width = static_cast<uint32_t>(1280 * dpiScale);
+        offscreenConfig.height = static_cast<uint32_t>(720 * dpiScale);
         offscreenConfig.colorFormat = VK_FORMAT_R8G8B8A8_SRGB;
         offscreenConfig.depthFormat = context.FindSupportedFormat(
             {VK_FORMAT_D32_SFLOAT, VK_FORMAT_D32_SFLOAT_S8_UINT, VK_FORMAT_D24_UNORM_S8_UINT},
@@ -205,6 +207,41 @@ public:
         if (io.ConfigFlags & ImGuiConfigFlags_DockingEnable)
         {
             ImGuiID dockspace_id = ImGui::GetID("MyDockSpace");
+
+            if (m_ResetLayout || !ImGui::DockBuilderGetNode(dockspace_id)) {
+                m_ResetLayout = false;
+                
+                ImGui::DockBuilderRemoveNode(dockspace_id);
+                ImGui::DockBuilderAddNode(dockspace_id, dockspace_flags | ImGuiDockNodeFlags_DockSpace);
+                
+                const ImGuiViewport* imgui_viewport = ImGui::GetMainViewport();
+                ImGui::DockBuilderSetNodeSize(dockspace_id, imgui_viewport->WorkSize);
+
+                ImGuiID dock_main_id = dockspace_id;
+                
+                // 1. Split top for Toolbar (about 6% of height)
+                ImGuiID dock_id_top = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Up, 0.06f, nullptr, &dock_main_id);
+                
+                // 2. Split left for Hierarchy (about 20% of width)
+                ImGuiID dock_id_left = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Left, 0.20f, nullptr, &dock_main_id);
+                
+                // 3. Split right for Inspector + Profiler (about 25% of width)
+                ImGuiID dock_id_right = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Right, 0.25f, nullptr, &dock_main_id);
+                
+                // 4. Split bottom for Asset Browser + Console (about 30% of height)
+                ImGuiID dock_id_bottom = ImGui::DockBuilderSplitNode(dock_main_id, ImGuiDir_Down, 0.30f, nullptr, &dock_main_id);
+
+                ImGui::DockBuilderDockWindow("Toolbar", dock_id_top);
+                ImGui::DockBuilderDockWindow("Hierarchy", dock_id_left);
+                ImGui::DockBuilderDockWindow("Inspector", dock_id_right);
+                ImGui::DockBuilderDockWindow("Profiler", dock_id_right);
+                ImGui::DockBuilderDockWindow("Asset Browser", dock_id_bottom);
+                ImGui::DockBuilderDockWindow("Console", dock_id_bottom);
+                ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
+
+                ImGui::DockBuilderFinish(dockspace_id);
+            }
+
             ImGui::DockSpace(dockspace_id, ImVec2(0.0f, 0.0f), dockspace_flags);
         }
 
@@ -224,6 +261,13 @@ public:
                 ImGui::Separator();
                 if (ImGui::MenuItem("Exit")) {
                     Close();
+                }
+                ImGui::EndMenu();
+            }
+
+            if (ImGui::BeginMenu("View")) {
+                if (ImGui::MenuItem("Reset Layout")) {
+                    m_ResetLayout = true;
                 }
                 ImGui::EndMenu();
             }
@@ -575,8 +619,9 @@ public:
             ImVec2 viewportPanelSize = ImGui::GetContentRegionAvail();
             if (viewportPanelSize.x != m_ViewportSize.x || viewportPanelSize.y != m_ViewportSize.y) {
                 m_ViewportSize = viewportPanelSize;
-                uint32_t width = std::max((uint32_t)m_ViewportSize.x, 64u);
-                uint32_t height = std::max((uint32_t)m_ViewportSize.y, 64u);
+                float dpiScale = SDL_GetWindowDisplayScale(m_Window);
+                uint32_t width = std::max((uint32_t)(m_ViewportSize.x * dpiScale), 64u);
+                uint32_t height = std::max((uint32_t)(m_ViewportSize.y * dpiScale), 64u);
 
                 vkDeviceWaitIdle(context.GetDevice());
                 
@@ -693,7 +738,7 @@ public:
         float aspect = m_OffscreenTarget->GetWidth() / (float)m_OffscreenTarget->GetHeight();
         m_Camera.SetPerspectiveProjection(glm::radians(45.0f), aspect, 0.1f, 100.0f);
 
-        ImGui::ShowDemoWindow();
+
     }
 
     void OnRender() override {
@@ -903,6 +948,7 @@ private:
     ImVec2 m_ViewportSize = { 1280.0f, 720.0f };
     bool m_ViewportFocused = false;
     bool m_ViewportHovered = false;
+    bool m_ResetLayout = false;
     int m_GizmoType = -1;
 
     bool m_PixelSnapping = true;
