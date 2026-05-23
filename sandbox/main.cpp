@@ -108,21 +108,23 @@ public:
             "../../../assets/test.png"
         };
 
+        bool loaded = false;
         for (const auto& path : searchPaths) {
             try {
                 m_Texture = std::make_unique<PixelEngine::Texture>(context, path);
                 for (uint32_t i = 0; i < context.GetSwapchainImageCount(); i++) {
                     context.UpdateDescriptorSets(i, m_Texture->GetImageView());
                 }
-                PX_INFO("Loaded texture: {0}", path);
+                PX_INFO("Successfully loaded texture from: {0}", path);
+                loaded = true;
                 break;
             } catch (...) {
                 continue;
             }
         }
 
-        if (!m_Texture) {
-            PX_WARN("Could not find assets/test.png in search paths. Sprite will use default white texture.");
+        if (!loaded) {
+            PX_WARN("Could not find assets/test.png in any search path. Using default white texture.");
         }
     }
 
