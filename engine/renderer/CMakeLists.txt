@@ -29,12 +29,16 @@ add_library(engine-renderer STATIC
     # ImGui Backends
     ${imgui_SOURCE_DIR}/backends/imgui_impl_sdl3.cpp
     ${imgui_SOURCE_DIR}/backends/imgui_impl_vulkan.cpp
+
+    # ImGuizmo
+    ${ImGuizmo_SOURCE_DIR}/src/ImGuizmo.cpp
 )
 
 target_include_directories(engine-renderer PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
+    ${ImGuizmo_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR} # Added project root for global engine/ includes
     ${CMAKE_SOURCE_DIR}/third_party
 )

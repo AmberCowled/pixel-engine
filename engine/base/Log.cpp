@@ -1,4 +1,5 @@
 #include "Log.hpp"
+#include "EditorConsoleSink.hpp"
 
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/basic_file_sink.h>
@@ -13,9 +14,11 @@ namespace PixelEngine {
         std::vector<spdlog::sink_ptr> logSinks;
         logSinks.emplace_back(std::make_shared<spdlog::sinks::stdout_color_sink_mt>());
         logSinks.emplace_back(std::make_shared<spdlog::sinks::basic_file_sink_mt>("pixel-engine.log", true));
+        logSinks.emplace_back(std::make_shared<EditorConsoleSink>());
 
         logSinks[0]->set_pattern("%^[%T] %n: %v%$");
         logSinks[1]->set_pattern("[%T] [%l] %n: %v");
+        logSinks[2]->set_pattern("[%T] %n: %v");
 
         s_CoreLogger = std::make_shared<spdlog::logger>("PIXEL", begin(logSinks), end(logSinks));
         spdlog::register_logger(s_CoreLogger);

@@ -36,6 +36,14 @@ CPMAddPackage(
     DOWNLOAD_ONLY YES
 )
 
+# ImGuizmo - Viewport Gizmos
+CPMAddPackage(
+    NAME ImGuizmo
+    GIT_REPOSITORY https://github.com/CedricGuillemet/ImGuizmo.git
+    GIT_TAG master
+    DOWNLOAD_ONLY YES
+)
+
 # EnTT - Entity Component System
 CPMAddPackage(
     NAME EnTT
