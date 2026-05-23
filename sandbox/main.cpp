@@ -9,6 +9,7 @@
 #include <engine/renderer/QuadData.hpp>
 #include <engine/renderer/OffscreenTarget.hpp>
 #include <engine/renderer/Camera.hpp>
+#include <engine/renderer/Texture.hpp>
 #include <imgui.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
@@ -41,22 +42,22 @@ public:
         context.UpdateUpscaleDescriptorSets(m_OffscreenTarget->GetColorImageView());
 
         // 3. Create Geometry Buffers
-        // Cube
-        VkDeviceSize vertexBufferSize = sizeof(PixelEngine::CUBE_VERTICES[0]) * PixelEngine::CUBE_VERTICES.size();
-        m_VertexBuffer = std::make_unique<PixelEngine::Buffer>(
-            context, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+        // Sprite Quad
+        VkDeviceSize spriteVertexBufferSize = sizeof(PixelEngine::SPRITE_VERTICES[0]) * PixelEngine::SPRITE_VERTICES.size();
+        m_SpriteVertexBuffer = std::make_unique<PixelEngine::Buffer>(
+            context, spriteVertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
-        m_VertexBuffer->Map();
-        m_VertexBuffer->WriteToBuffer((void*)PixelEngine::CUBE_VERTICES.data(), vertexBufferSize);
+        m_SpriteVertexBuffer->Map();
+        m_SpriteVertexBuffer->WriteToBuffer((void*)PixelEngine::SPRITE_VERTICES.data(), spriteVertexBufferSize);
 
-        VkDeviceSize indexBufferSize = sizeof(PixelEngine::CUBE_INDICES[0]) * PixelEngine::CUBE_INDICES.size();
-        m_IndexBuffer = std::make_unique<PixelEngine::Buffer>(
-            context, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
+        VkDeviceSize spriteIndexBufferSize = sizeof(PixelEngine::SPRITE_INDICES[0]) * PixelEngine::SPRITE_INDICES.size();
+        m_SpriteIndexBuffer = std::make_unique<PixelEngine::Buffer>(
+            context, spriteIndexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
             VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
         );
-        m_IndexBuffer->Map();
-        m_IndexBuffer->WriteToBuffer((void*)PixelEngine::CUBE_INDICES.data(), indexBufferSize);
+        m_SpriteIndexBuffer->Map();
+        m_SpriteIndexBuffer->WriteToBuffer((void*)PixelEngine::SPRITE_INDICES.data(), spriteIndexBufferSize);
 
         // Fullscreen Triangle
         VkDeviceSize quadVertexBufferSize = sizeof(PixelEngine::FULLSCREEN_TRIANGLE_VERTICES[0]) * PixelEngine::FULLSCREEN_TRIANGLE_VERTICES.size();
@@ -76,14 +77,14 @@ public:
         m_QuadIndexBuffer->WriteToBuffer((void*)PixelEngine::FULLSCREEN_TRIANGLE_INDICES.data(), quadIndexBufferSize);
 
         // 4. Create Pipelines
-        // 3D Pipeline
-        PixelEngine::PipelineConfigInfo pipelineConfig{};
-        PixelEngine::GraphicsPipeline::DefaultPipelineConfigInfo(pipelineConfig);
-        pipelineConfig.renderPass = context.GetOffscreenRenderPass();
-        pipelineConfig.pipelineLayout = context.GetPipelineLayout();
+        // Sprite Pipeline
+        PixelEngine::PipelineConfigInfo spritePipelineConfig{};
+        PixelEngine::GraphicsPipeline::DefaultPipelineConfigInfo(spritePipelineConfig);
+        spritePipelineConfig.renderPass = context.GetOffscreenRenderPass();
+        spritePipelineConfig.pipelineLayout = context.GetPipelineLayout();
         
-        m_Pipeline = std::make_unique<PixelEngine::GraphicsPipeline>(
-            context, "../shaders/simple.vert.spv", "../shaders/simple.frag.spv", pipelineConfig
+        m_SpritePipeline = std::make_unique<PixelEngine::GraphicsPipeline>(
+            context, "../shaders/sprite.vert.spv", "../shaders/sprite.frag.spv", spritePipelineConfig
         );
 
         // Upscale Pipeline
@@ -98,6 +99,16 @@ public:
         m_UpscalePipeline = std::make_unique<PixelEngine::GraphicsPipeline>(
             context, "../shaders/upscale.vert.spv", "../shaders/upscale.frag.spv", upscaleConfig
         );
+
+        // 5. Load Texture
+        try {
+            m_Texture = std::make_unique<PixelEngine::Texture>(context, "../assets/test.png");
+            for (uint32_t i = 0; i < context.GetSwapchainImageCount(); i++) {
+                context.UpdateDescriptorSets(i, m_Texture->GetImageView());
+            }
+        } catch (...) {
+            PX_WARN("Could not load assets/test.png. Sprite will be untextured.");
+        }
     }
 
     ~SandboxApp() {
@@ -141,23 +152,30 @@ public:
         }
 
         ImGui::Checkbox("Pixel Snapping", &m_PixelSnapping);
-        ImGui::ColorEdit4("Cube Color", &m_CubeColor.x);
+        ImGui::ColorEdit4("Sprite Color", &m_SpriteColor.x);
         ImGui::SliderFloat("Rotation Speed", &m_RotationSpeed, 0.0f, 200.0f);
+        ImGui::SliderFloat("Sprite Scale", &m_SpriteScale, 1.0f, 512.0f);
 
         ImGui::End();
 
-        // Update Camera
-        m_Camera.SetPerspectiveProjection(glm::radians(45.0f), m_OffscreenTarget->GetWidth() / (float)m_OffscreenTarget->GetHeight(), 0.1f, 10.0f);
-        m_Camera.SetViewTarget(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f));
+        // Update Camera (Orthographic)
+        float aspect = m_OffscreenTarget->GetWidth() / (float)m_OffscreenTarget->GetHeight();
+        float h = m_OffscreenTarget->GetHeight();
+        float w = m_OffscreenTarget->GetWidth();
+        m_Camera.SetOrthographicProjection(-w/2, w/2, -h/2, h/2, -1.0f, 1.0f);
+        m_Camera.SetViewTarget(glm::vec3(0.0f, 0.0f, 1.0f), glm::vec3(0.0f, 0.0f, 0.0f));
 
         // Update UBO
         PixelEngine::GlobalUBO ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(m_Rotation), glm::vec3(0.5f, 1.0f, 0.0f));
+        ubo.model = glm::mat4(1.0f);
+        ubo.model = glm::rotate(ubo.model, glm::radians(m_Rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+        ubo.model = glm::scale(ubo.model, glm::vec3(m_SpriteScale, m_SpriteScale, 1.0f));
+
         ubo.view = m_Camera.GetView();
         ubo.proj = m_Camera.GetProjection();
         ubo.resolution = glm::vec2(m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight());
         ubo.pixelSnapping = m_PixelSnapping ? 1.0f : 0.0f;
-        ubo.baseColor = m_CubeColor;
+        ubo.baseColor = m_SpriteColor;
 
         uint32_t imageIndex = GetCurrentImageIndex();
         context.GetUniformBuffer(imageIndex).WriteToBuffer(&ubo, sizeof(ubo));
@@ -170,7 +188,7 @@ public:
         VkCommandBuffer commandBuffer = GetCurrentCommandBuffer();
         auto& context = GetVulkanContext();
 
-        // Pass 1: Offscreen 3D Render
+        // Pass 1: Offscreen Sprite Render
         {
             VkRenderPassBeginInfo renderPassInfo{};
             renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -180,7 +198,7 @@ public:
             renderPassInfo.renderArea.extent = { m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight() };
 
             std::array<VkClearValue, 2> clearValues{};
-            clearValues[0].color = {{0.01f, 0.01f, 0.01f, 1.0f}};
+            clearValues[0].color = {{0.1f, 0.1f, 0.1f, 1.0f}};
             clearValues[1].depthStencil = {1.0f, 0};
 
             renderPassInfo.clearValueCount = static_cast<uint32_t>(clearValues.size());
@@ -202,17 +220,17 @@ public:
             scissor.extent = { m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight() };
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            m_Pipeline->Bind(commandBuffer);
+            m_SpritePipeline->Bind(commandBuffer);
 
-            VkBuffer vertexBuffers[] = {m_VertexBuffer->GetBuffer()};
+            VkBuffer vertexBuffers[] = {m_SpriteVertexBuffer->GetBuffer()};
             VkDeviceSize offsets[] = {0};
             vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-            vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer->GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
+            vkCmdBindIndexBuffer(commandBuffer, m_SpriteIndexBuffer->GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
 
             VkDescriptorSet descriptorSet = context.GetDescriptorSet(imageIndex);
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context.GetPipelineLayout(), 0, 1, &descriptorSet, 0, nullptr);
 
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(PixelEngine::CUBE_INDICES.size()), 1, 0, 0, 0);
+            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(PixelEngine::SPRITE_INDICES.size()), 1, 0, 0, 0);
 
             vkCmdEndRenderPass(commandBuffer);
         }
@@ -253,21 +271,24 @@ public:
     }
 
 private:
-    std::unique_ptr<PixelEngine::GraphicsPipeline> m_Pipeline;
+    std::unique_ptr<PixelEngine::GraphicsPipeline> m_SpritePipeline;
     std::unique_ptr<PixelEngine::GraphicsPipeline> m_UpscalePipeline;
     std::unique_ptr<PixelEngine::OffscreenTarget> m_OffscreenTarget;
-    std::unique_ptr<PixelEngine::Buffer> m_VertexBuffer;
-    std::unique_ptr<PixelEngine::Buffer> m_IndexBuffer;
+    std::unique_ptr<PixelEngine::Buffer> m_SpriteVertexBuffer;
+    std::unique_ptr<PixelEngine::Buffer> m_SpriteIndexBuffer;
     std::unique_ptr<PixelEngine::Buffer> m_QuadVertexBuffer;
     std::unique_ptr<PixelEngine::Buffer> m_QuadIndexBuffer;
+    std::unique_ptr<PixelEngine::Texture> m_Texture;
+    
     PixelEngine::Camera m_Camera;
     float m_Rotation = 0.0f;
 
     int m_InternalWidth = 320;
     int m_InternalHeight = 180;
     bool m_PixelSnapping = true;
-    glm::vec4 m_CubeColor = {1.0f, 1.0f, 1.0f, 1.0f};
+    glm::vec4 m_SpriteColor = {1.0f, 1.0f, 1.0f, 1.0f};
     float m_RotationSpeed = 50.0f;
+    float m_SpriteScale = 64.0f;
 };
 
 int main(int argc, char* argv[]) {

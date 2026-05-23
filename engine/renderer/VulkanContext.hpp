@@ -50,6 +50,7 @@ namespace PixelEngine {
         void WriteTimestamp(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, uint32_t imageIndex, uint32_t queryIndex);
         void FetchQueryResults(uint32_t imageIndex);
 
+        void UpdateDescriptorSets(uint32_t imageIndex, VkImageView imageView);
         void UpdateUpscaleDescriptorSets(VkImageView colorImageView);
 
         float GetGPUTime() const { return m_GPUTime; }
@@ -59,6 +60,9 @@ namespace PixelEngine {
 
         void CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory);
         VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags);
+
+        VkCommandBuffer BeginSingleTimeCommands();
+        void EndSingleTimeCommands(VkCommandBuffer commandBuffer);
 
     private:
         void CreateInstance();

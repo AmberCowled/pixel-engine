@@ -5,6 +5,8 @@ set(SHADER_SOURCES
     simple.frag
     upscale.vert
     upscale.frag
+    sprite.vert
+    sprite.frag
 )
 
 set(SPV_FILES "")
