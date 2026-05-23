@@ -2,6 +2,8 @@
 add_library(engine-core STATIC 
     EngineApp.hpp
     EngineApp.cpp
+    UUID.hpp
+    UUID.cpp
 )
 target_include_directories(engine-core PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR}

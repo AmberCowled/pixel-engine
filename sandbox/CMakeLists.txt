@@ -1,6 +1,6 @@
 # Sandbox Application
 add_executable(sandbox main.cpp)
-target_link_libraries(sandbox PRIVATE engine-core engine-renderer)
+target_link_libraries(sandbox PRIVATE engine-core engine-renderer engine-ecs engine-assets)
 
 # Copy SDL3.dll to binary directory on Windows
 if (WIN32)

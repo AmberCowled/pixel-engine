@@ -10,6 +10,11 @@
 #include <engine/renderer/OffscreenTarget.hpp>
 #include <engine/renderer/Camera.hpp>
 #include <engine/renderer/Texture.hpp>
+#include <engine/assets/AssetManager.hpp>
+#include <engine/ecs/Scene.hpp>
+#include <engine/ecs/Entity.hpp>
+#include <engine/ecs/Components.hpp>
+#include <engine/ecs/RenderSystem.hpp>
 #include <imgui.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
@@ -24,7 +29,10 @@ public:
         
         auto& context = GetVulkanContext();
 
-        // 1. Create Offscreen Target (320x180)
+        // 1. Initialize Asset Manager
+        PixelEngine::AssetManager::Init(context);
+
+        // 2. Create Offscreen Target (320x180)
         PixelEngine::OffscreenTargetConfig offscreenConfig{};
         offscreenConfig.width = 320;
         offscreenConfig.height = 180;
@@ -39,28 +47,10 @@ public:
             context, offscreenConfig, context.GetOffscreenRenderPass()
         );
 
-        // 2. Link Offscreen Target to Upscale pipeline
+        // 3. Link Offscreen Target to Upscale pipeline
         context.UpdateUpscaleDescriptorSets(m_OffscreenTarget->GetColorImageView());
 
-        // 3. Create Geometry Buffers
-        // Cube
-        VkDeviceSize vertexBufferSize = sizeof(PixelEngine::CUBE_VERTICES[0]) * PixelEngine::CUBE_VERTICES.size();
-        m_VertexBuffer = std::make_unique<PixelEngine::Buffer>(
-            context, vertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
-        m_VertexBuffer->Map();
-        m_VertexBuffer->WriteToBuffer((void*)PixelEngine::CUBE_VERTICES.data(), vertexBufferSize);
-
-        VkDeviceSize indexBufferSize = sizeof(PixelEngine::CUBE_INDICES[0]) * PixelEngine::CUBE_INDICES.size();
-        m_IndexBuffer = std::make_unique<PixelEngine::Buffer>(
-            context, indexBufferSize, VK_BUFFER_USAGE_INDEX_BUFFER_BIT,
-            VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT
-        );
-        m_IndexBuffer->Map();
-        m_IndexBuffer->WriteToBuffer((void*)PixelEngine::CUBE_INDICES.data(), indexBufferSize);
-
-        // Fullscreen Triangle
+        // 4. Create Geometry Buffers for Upscaling
         VkDeviceSize quadVertexBufferSize = sizeof(PixelEngine::FULLSCREEN_TRIANGLE_VERTICES[0]) * PixelEngine::FULLSCREEN_TRIANGLE_VERTICES.size();
         m_QuadVertexBuffer = std::make_unique<PixelEngine::Buffer>(
             context, quadVertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -77,18 +67,21 @@ public:
         m_QuadIndexBuffer->Map();
         m_QuadIndexBuffer->WriteToBuffer((void*)PixelEngine::FULLSCREEN_TRIANGLE_INDICES.data(), quadIndexBufferSize);
 
-        // 4. Create Pipelines
-        // 3D Pipeline
-        PixelEngine::PipelineConfigInfo pipelineConfig{};
-        PixelEngine::GraphicsPipeline::DefaultPipelineConfigInfo(pipelineConfig);
-        pipelineConfig.renderPass = context.GetOffscreenRenderPass();
-        pipelineConfig.pipelineLayout = context.GetPipelineLayout();
-        
-        m_Pipeline = std::make_unique<PixelEngine::GraphicsPipeline>(
-            context, "../shaders/simple.vert.spv", "../shaders/simple.frag.spv", pipelineConfig
-        );
+        // 5. Create Upscale Pipeline
+        std::vector<std::string> upscaleSearchPaths = {
+            "shaders/",
+            "../shaders/",
+            "../../shaders/",
+            "build/bin/shaders/",
+            "../bin/shaders/"
+        };
+        std::string upscaleVert, upscaleFrag;
+        for (const auto& p : upscaleSearchPaths) {
+            if (upscaleVert.empty() && std::filesystem::exists(p + "upscale.vert.spv")) upscaleVert = p + "upscale.vert.spv";
+            if (upscaleFrag.empty() && std::filesystem::exists(p + "upscale.frag.spv")) upscaleFrag = p + "upscale.frag.spv";
+        }
+        if (upscaleVert.empty() || upscaleFrag.empty()) PX_CORE_CRITICAL("Failed to find Upscale shaders!");
 
-        // Upscale Pipeline
         PixelEngine::PipelineConfigInfo upscaleConfig{};
         PixelEngine::GraphicsPipeline::DefaultPipelineConfigInfo(upscaleConfig);
         upscaleConfig.renderPass = context.GetRenderPass();
@@ -98,40 +91,37 @@ public:
         upscaleConfig.rasterizationInfo.cullMode = VK_CULL_MODE_NONE;
 
         m_UpscalePipeline = std::make_unique<PixelEngine::GraphicsPipeline>(
-            context, "../shaders/upscale.vert.spv", "../shaders/upscale.frag.spv", upscaleConfig
+            context, upscaleVert, upscaleFrag, upscaleConfig
         );
 
-        // 5. Load Texture
-        std::vector<std::string> searchPaths = {
-            "assets/test.png",
-            "../assets/test.png",
-            "../../assets/test.png",
-            "../../../assets/test.png"
-        };
+        // 6. Initialize ECS Systems
+        m_ActiveScene = std::make_unique<PixelEngine::Scene>();
+        m_RenderSystem = std::make_unique<PixelEngine::RenderSystem>(context);
 
-        bool loaded = false;
+        // 7. Load Assets & Create Entities
+        PixelEngine::UUID testTexture = 0;
+        std::vector<std::string> searchPaths = { "assets/test.png", "../assets/test.png", "../../assets/test.png", "../../../assets/test.png" };
         for (const auto& path : searchPaths) {
             if (std::filesystem::exists(path)) {
-                try {
-                    m_Texture = std::make_unique<PixelEngine::Texture>(context, path);
-                    for (uint32_t i = 0; i < context.GetSwapchainImageCount(); i++) {
-                        context.UpdateDescriptorSets(i, m_Texture->GetImageView());
-                    }
-                    PX_INFO("Successfully loaded texture from: {0}", path);
-                    loaded = true;
-                    break;
-                } catch (...) {
-                    continue;
-                }
+                testTexture = PixelEngine::AssetManager::LoadTexture(path);
+                break;
             }
         }
 
-        if (!loaded) {
-            PX_WARN("Could not find assets/test.png in any search path. Using default white texture.");
-        }
+        // Textured Cube Entity
+        auto cube = m_ActiveScene->CreateEntity("Textured Cube");
+        cube.AddComponent<PixelEngine::MeshRendererComponent>();
+        cube.GetComponent<PixelEngine::MeshRendererComponent>().TextureID = testTexture;
+
+        // Floating Sprite Entity
+        auto sprite = m_ActiveScene->CreateEntity("Floating Sprite");
+        sprite.AddComponent<PixelEngine::SpriteRendererComponent>();
+        sprite.GetComponent<PixelEngine::SpriteRendererComponent>().TextureID = testTexture;
+        sprite.GetComponent<PixelEngine::TransformComponent>().Translation = {2.0f, 0.0f, 0.0f};
     }
 
     ~SandboxApp() {
+        PixelEngine::AssetManager::Shutdown();
         PX_INFO("Sandbox App Shutdown.");
     }
 
@@ -140,7 +130,65 @@ public:
 
         auto& context = GetVulkanContext();
         
-        // UI
+        // 1. Hierarchy Window
+        ImGui::Begin("Hierarchy");
+        auto view = m_ActiveScene->Reg().view<PixelEngine::TagComponent>();
+        for (auto entity : view) {
+            auto& tag = view.get<PixelEngine::TagComponent>(entity);
+            bool isSelected = (m_SelectedEntity == entity);
+            if (ImGui::Selectable(tag.Tag.c_str(), isSelected)) {
+                m_SelectedEntity = {entity, m_ActiveScene.get()};
+            }
+        }
+        ImGui::Separator();
+        if (ImGui::Button("Add Cube")) {
+            auto e = m_ActiveScene->CreateEntity("New Cube");
+            e.AddComponent<PixelEngine::MeshRendererComponent>();
+        }
+        if (ImGui::Button("Add Sprite")) {
+            auto e = m_ActiveScene->CreateEntity("New Sprite");
+            e.AddComponent<PixelEngine::SpriteRendererComponent>();
+        }
+        ImGui::End();
+
+        // 2. Inspector Window
+        ImGui::Begin("Inspector");
+        if (m_SelectedEntity) {
+            auto& tag = m_SelectedEntity.GetComponent<PixelEngine::TagComponent>();
+            char buffer[256];
+            memset(buffer, 0, sizeof(buffer));
+            strncpy_s(buffer, tag.Tag.c_str(), sizeof(buffer));
+            if (ImGui::InputText("Tag", buffer, sizeof(buffer))) {
+                tag.Tag = std::string(buffer);
+            }
+
+            ImGui::Separator();
+
+            if (m_SelectedEntity.HasComponent<PixelEngine::TransformComponent>()) {
+                auto& tc = m_SelectedEntity.GetComponent<PixelEngine::TransformComponent>();
+                ImGui::DragFloat3("Position", &tc.Translation.x, 0.1f);
+                ImGui::DragFloat3("Rotation", &tc.Rotation.x, 0.1f);
+                ImGui::DragFloat3("Scale", &tc.Scale.x, 0.1f);
+            }
+
+            if (m_SelectedEntity.HasComponent<PixelEngine::MeshRendererComponent>()) {
+                auto& mc = m_SelectedEntity.GetComponent<PixelEngine::MeshRendererComponent>();
+                ImGui::ColorEdit4("Mesh Color", &mc.Color.x);
+            }
+
+            if (m_SelectedEntity.HasComponent<PixelEngine::SpriteRendererComponent>()) {
+                auto& sc = m_SelectedEntity.GetComponent<PixelEngine::SpriteRendererComponent>();
+                ImGui::ColorEdit4("Sprite Color", &sc.Color.x);
+            }
+
+            if (ImGui::Button("Delete Entity")) {
+                m_ActiveScene->DestroyEntity(m_SelectedEntity);
+                m_SelectedEntity = {};
+            }
+        }
+        ImGui::End();
+
+        // 3. Engine Controls Window
         ImGui::Begin("Engine Controls");
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("CPU Time: %.3f ms", deltaTime * 1000.0f);
@@ -172,31 +220,14 @@ public:
         }
 
         ImGui::Checkbox("Pixel Snapping", &m_PixelSnapping);
-        ImGui::ColorEdit4("Cube Color", &m_CubeColor.x);
         ImGui::SliderFloat("Rotation Speed", &m_RotationSpeed, 0.0f, 200.0f);
-        ImGui::SliderFloat("Cube Scale", &m_CubeScale, 0.1f, 5.0f);
 
         ImGui::End();
 
         // Update Camera (Perspective for 3D)
         float aspect = m_OffscreenTarget->GetWidth() / (float)m_OffscreenTarget->GetHeight();
         m_Camera.SetPerspectiveProjection(glm::radians(45.0f), aspect, 0.1f, 100.0f);
-        m_Camera.SetViewTarget(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f));
-
-        // Update UBO
-        PixelEngine::GlobalUBO ubo{};
-        ubo.model = glm::mat4(1.0f);
-        ubo.model = glm::rotate(ubo.model, glm::radians(m_Rotation), glm::vec3(0.5f, 1.0f, 0.0f));
-        ubo.model = glm::scale(ubo.model, glm::vec3(m_CubeScale));
-
-        ubo.view = m_Camera.GetView();
-        ubo.proj = m_Camera.GetProjection();
-        ubo.resolution = glm::vec2(m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight());
-        ubo.pixelSnapping = m_PixelSnapping ? 1.0f : 0.0f;
-        ubo.baseColor = m_CubeColor;
-
-        uint32_t imageIndex = GetCurrentImageIndex();
-        context.GetUniformBuffer(imageIndex).WriteToBuffer(&ubo, sizeof(ubo));
+        m_Camera.SetViewTarget(glm::vec3(3.0f, 3.0f, 3.0f), glm::vec3(0.0f, 0.0f, 0.0f));
 
         ImGui::ShowDemoWindow();
     }
@@ -206,7 +237,7 @@ public:
         VkCommandBuffer commandBuffer = GetCurrentCommandBuffer();
         auto& context = GetVulkanContext();
 
-        // Pass 1: Offscreen 3D Render
+        // Pass 1: Offscreen ECS Render
         {
             VkRenderPassBeginInfo renderPassInfo{};
             renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
@@ -238,17 +269,8 @@ public:
             scissor.extent = { m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight() };
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            m_Pipeline->Bind(commandBuffer);
-
-            VkBuffer vertexBuffers[] = {m_VertexBuffer->GetBuffer()};
-            VkDeviceSize offsets[] = {0};
-            vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-            vkCmdBindIndexBuffer(commandBuffer, m_IndexBuffer->GetBuffer(), 0, VK_INDEX_TYPE_UINT16);
-
-            VkDescriptorSet descriptorSet = context.GetDescriptorSet(imageIndex);
-            vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context.GetPipelineLayout(), 0, 1, &descriptorSet, 0, nullptr);
-
-            vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(PixelEngine::CUBE_INDICES.size()), 1, 0, 0, 0);
+            // Delegate rendering to ECS system
+            m_RenderSystem->Render(commandBuffer, imageIndex, *m_ActiveScene, m_Camera);
 
             vkCmdEndRenderPass(commandBuffer);
         }
@@ -283,30 +305,28 @@ public:
             vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, context.GetUpscalePipelineLayout(), 0, 1, &upscaleDescriptorSet, 0, nullptr);
 
             vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(PixelEngine::FULLSCREEN_TRIANGLE_INDICES.size()), 1, 0, 0, 0);
-
-            // ImGui will be rendered here by EngineApp which will also end the pass
         }
     }
 
 private:
-    std::unique_ptr<PixelEngine::GraphicsPipeline> m_Pipeline;
     std::unique_ptr<PixelEngine::GraphicsPipeline> m_UpscalePipeline;
     std::unique_ptr<PixelEngine::OffscreenTarget> m_OffscreenTarget;
-    std::unique_ptr<PixelEngine::Buffer> m_VertexBuffer;
-    std::unique_ptr<PixelEngine::Buffer> m_IndexBuffer;
     std::unique_ptr<PixelEngine::Buffer> m_QuadVertexBuffer;
     std::unique_ptr<PixelEngine::Buffer> m_QuadIndexBuffer;
-    std::unique_ptr<PixelEngine::Texture> m_Texture;
     
+    std::unique_ptr<PixelEngine::Scene> m_ActiveScene;
+    std::unique_ptr<PixelEngine::RenderSystem> m_RenderSystem;
+    PixelEngine::Entity m_SelectedEntity;
+
     PixelEngine::Camera m_Camera;
     float m_Rotation = 0.0f;
 
     int m_InternalWidth = 320;
     int m_InternalHeight = 180;
     bool m_PixelSnapping = true;
-    glm::vec4 m_CubeColor = {1.0f, 1.0f, 1.0f, 1.0f};
+    glm::vec4 m_ObjectColor = {1.0f, 1.0f, 1.0f, 1.0f};
     float m_RotationSpeed = 50.0f;
-    float m_CubeScale = 1.0f;
+    float m_ObjectScale = 1.0f;
 };
 
 int main(int argc, char* argv[]) {

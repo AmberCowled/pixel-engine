@@ -31,12 +31,14 @@ namespace PixelEngine {
         }
 
         vkBindBufferMemory(m_Context.GetDevice(), m_Buffer, m_Memory, 0);
+        PX_CORE_INFO("Buffer Created: VkBuffer = {0:x}, VkDeviceMemory = {1:x}", (uint64_t)m_Buffer, (uint64_t)m_Memory);
     }
 
     Buffer::~Buffer() {
         if (m_Mapped) {
             Unmap();
         }
+        PX_CORE_INFO("Buffer Destroyed: VkBuffer = {0:x}, VkDeviceMemory = {1:x}", (uint64_t)m_Buffer, (uint64_t)m_Memory);
         vkDestroyBuffer(m_Context.GetDevice(), m_Buffer, nullptr);
         vkFreeMemory(m_Context.GetDevice(), m_Memory, nullptr);
     }

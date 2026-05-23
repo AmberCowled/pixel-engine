@@ -33,14 +33,20 @@ namespace PixelEngine {
         VkCommandPool GetCommandPool() const { return m_CommandPool; }
         VkCommandBuffer GetCommandBuffer(uint32_t index) const { return m_CommandBuffers[index]; }
         
-        VkDescriptorSetLayout GetDescriptorSetLayout() const { return m_DescriptorSetLayout; }
+        VkDescriptorSetLayout GetGlobalDescriptorSetLayout() const { return m_GlobalDescriptorSetLayout; }
+        VkDescriptorSetLayout GetTextureDescriptorSetLayout() const { return m_TextureDescriptorSetLayout; }
         VkDescriptorSetLayout GetUpscaleDescriptorSetLayout() const { return m_UpscaleDescriptorSetLayout; }
-        VkDescriptorSet GetDescriptorSet(uint32_t index) const { return m_DescriptorSets[index]; }
+        
+        VkDescriptorSet GetGlobalDescriptorSet(uint32_t index) const { return m_GlobalDescriptorSets[index]; }
         VkDescriptorSet GetUpscaleDescriptorSet(uint32_t index) const { return m_UpscaleDescriptorSets[index]; }
+
+        VkDescriptorSet CreateTextureDescriptorSet(VkImageView imageView);
+
         VkPipelineLayout GetPipelineLayout() const { return m_PipelineLayout; }
         VkPipelineLayout GetUpscalePipelineLayout() const { return m_UpscalePipelineLayout; }
         VkSampler GetTextureSampler() const { return m_TextureSampler; }
         Buffer& GetUniformBuffer(uint32_t index) { return *m_UniformBuffers[index]; }
+        VkDescriptorSet GetDefaultTextureDescriptorSet() const { return m_DefaultTextureDescriptorSet; }
 
         uint32_t AcquireNextImage(VkSemaphore signalSemaphore);
         void SubmitCommandBuffer(uint32_t imageIndex, VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence fence);
@@ -50,7 +56,6 @@ namespace PixelEngine {
         void WriteTimestamp(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, uint32_t imageIndex, uint32_t queryIndex);
         void FetchQueryResults(uint32_t imageIndex);
 
-        void UpdateDescriptorSets(uint32_t imageIndex, VkImageView imageView);
         void UpdateUpscaleDescriptorSets(VkImageView colorImageView);
 
         float GetGPUTime() const { return m_GPUTime; }
@@ -136,9 +141,10 @@ namespace PixelEngine {
         // Descriptors
         VkDescriptorPool m_DescriptorPool = VK_NULL_HANDLE;
         
-        VkDescriptorSetLayout m_DescriptorSetLayout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_GlobalDescriptorSetLayout = VK_NULL_HANDLE;
+        VkDescriptorSetLayout m_TextureDescriptorSetLayout = VK_NULL_HANDLE;
         VkPipelineLayout m_PipelineLayout = VK_NULL_HANDLE;
-        std::vector<VkDescriptorSet> m_DescriptorSets;
+        std::vector<VkDescriptorSet> m_GlobalDescriptorSets;
 
         VkDescriptorSetLayout m_UpscaleDescriptorSetLayout = VK_NULL_HANDLE;
         VkPipelineLayout m_UpscalePipelineLayout = VK_NULL_HANDLE;
@@ -150,6 +156,7 @@ namespace PixelEngine {
         VkImage m_DefaultImage = VK_NULL_HANDLE;
         VkDeviceMemory m_DefaultImageMemory = VK_NULL_HANDLE;
         VkImageView m_DefaultImageView = VK_NULL_HANDLE;
+        VkDescriptorSet m_DefaultTextureDescriptorSet = VK_NULL_HANDLE;
 
         std::vector<std::unique_ptr<Buffer>> m_UniformBuffers;
 

@@ -36,5 +36,12 @@ CPMAddPackage(
     DOWNLOAD_ONLY YES
 )
 
+# EnTT - Entity Component System
+CPMAddPackage(
+    NAME EnTT
+    GIT_REPOSITORY https://github.com/skypjack/entt.git
+    GIT_TAG v3.13.0
+)
+
 # Vulkan SDK
 find_package(Vulkan REQUIRED)
