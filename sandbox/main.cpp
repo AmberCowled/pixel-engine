@@ -101,13 +101,28 @@ public:
         );
 
         // 5. Load Texture
-        try {
-            m_Texture = std::make_unique<PixelEngine::Texture>(context, "../assets/test.png");
-            for (uint32_t i = 0; i < context.GetSwapchainImageCount(); i++) {
-                context.UpdateDescriptorSets(i, m_Texture->GetImageView());
+        std::vector<std::string> searchPaths = {
+            "assets/test.png",
+            "../assets/test.png",
+            "../../assets/test.png",
+            "../../../assets/test.png"
+        };
+
+        for (const auto& path : searchPaths) {
+            try {
+                m_Texture = std::make_unique<PixelEngine::Texture>(context, path);
+                for (uint32_t i = 0; i < context.GetSwapchainImageCount(); i++) {
+                    context.UpdateDescriptorSets(i, m_Texture->GetImageView());
+                }
+                PX_INFO("Loaded texture: {0}", path);
+                break;
+            } catch (...) {
+                continue;
             }
-        } catch (...) {
-            PX_WARN("Could not load assets/test.png. Sprite will be untextured.");
+        }
+
+        if (!m_Texture) {
+            PX_WARN("Could not find assets/test.png in search paths. Sprite will use default white texture.");
         }
     }
 

@@ -83,6 +83,7 @@ namespace PixelEngine {
         void CreateUniformBuffers();
         void CreateDescriptorSets();
         void CreateTextureSampler();
+        void CreateDefaultTexture();
         void CreateSyncObjects();
         void CreateQueryPool();
 
@@ -144,6 +145,11 @@ namespace PixelEngine {
         std::vector<VkDescriptorSet> m_UpscaleDescriptorSets;
 
         VkSampler m_TextureSampler = VK_NULL_HANDLE;
+
+        // Default Texture
+        VkImage m_DefaultImage = VK_NULL_HANDLE;
+        VkDeviceMemory m_DefaultImageMemory = VK_NULL_HANDLE;
+        VkImageView m_DefaultImageView = VK_NULL_HANDLE;
 
         std::vector<std::unique_ptr<Buffer>> m_UniformBuffers;
 

@@ -21,12 +21,13 @@ namespace PixelEngine {
     void Texture::CreateTextureImage(const std::string& path) {
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-        VkDeviceSize imageSize = static_cast<VkDeviceSize>(texWidth) * texHeight * 4;
-
+        
         if (!pixels) {
-            PX_CORE_ERROR("Failed to load texture image: {0}", path);
+            PX_CORE_ERROR("STB_IMAGE: Failed to load texture image from path: {0}. Reason: {1}", path, stbi_failure_reason());
             throw std::runtime_error("failed to load texture image!");
         }
+
+        VkDeviceSize imageSize = static_cast<VkDeviceSize>(texWidth) * texHeight * 4;
 
         m_Width = static_cast<uint32_t>(texWidth);
         m_Height = static_cast<uint32_t>(texHeight);
