@@ -9,11 +9,13 @@
 #include <engine/renderer/QuadData.hpp>
 #include <engine/renderer/OffscreenTarget.hpp>
 #include <engine/renderer/Camera.hpp>
+#include <engine/renderer/Texture.hpp>
 #include <imgui.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
 #include <iostream>
 #include <array>
+#include <filesystem>
 
 class SandboxApp : public PixelEngine::EngineApp {
 public:
@@ -98,6 +100,35 @@ public:
         m_UpscalePipeline = std::make_unique<PixelEngine::GraphicsPipeline>(
             context, "../shaders/upscale.vert.spv", "../shaders/upscale.frag.spv", upscaleConfig
         );
+
+        // 5. Load Texture
+        std::vector<std::string> searchPaths = {
+            "assets/test.png",
+            "../assets/test.png",
+            "../../assets/test.png",
+            "../../../assets/test.png"
+        };
+
+        bool loaded = false;
+        for (const auto& path : searchPaths) {
+            if (std::filesystem::exists(path)) {
+                try {
+                    m_Texture = std::make_unique<PixelEngine::Texture>(context, path);
+                    for (uint32_t i = 0; i < context.GetSwapchainImageCount(); i++) {
+                        context.UpdateDescriptorSets(i, m_Texture->GetImageView());
+                    }
+                    PX_INFO("Successfully loaded texture from: {0}", path);
+                    loaded = true;
+                    break;
+                } catch (...) {
+                    continue;
+                }
+            }
+        }
+
+        if (!loaded) {
+            PX_WARN("Could not find assets/test.png in any search path. Using default white texture.");
+        }
     }
 
     ~SandboxApp() {
@@ -143,16 +174,21 @@ public:
         ImGui::Checkbox("Pixel Snapping", &m_PixelSnapping);
         ImGui::ColorEdit4("Cube Color", &m_CubeColor.x);
         ImGui::SliderFloat("Rotation Speed", &m_RotationSpeed, 0.0f, 200.0f);
+        ImGui::SliderFloat("Cube Scale", &m_CubeScale, 0.1f, 5.0f);
 
         ImGui::End();
 
-        // Update Camera
-        m_Camera.SetPerspectiveProjection(glm::radians(45.0f), m_OffscreenTarget->GetWidth() / (float)m_OffscreenTarget->GetHeight(), 0.1f, 10.0f);
+        // Update Camera (Perspective for 3D)
+        float aspect = m_OffscreenTarget->GetWidth() / (float)m_OffscreenTarget->GetHeight();
+        m_Camera.SetPerspectiveProjection(glm::radians(45.0f), aspect, 0.1f, 100.0f);
         m_Camera.SetViewTarget(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f));
 
         // Update UBO
         PixelEngine::GlobalUBO ubo{};
-        ubo.model = glm::rotate(glm::mat4(1.0f), glm::radians(m_Rotation), glm::vec3(0.5f, 1.0f, 0.0f));
+        ubo.model = glm::mat4(1.0f);
+        ubo.model = glm::rotate(ubo.model, glm::radians(m_Rotation), glm::vec3(0.5f, 1.0f, 0.0f));
+        ubo.model = glm::scale(ubo.model, glm::vec3(m_CubeScale));
+
         ubo.view = m_Camera.GetView();
         ubo.proj = m_Camera.GetProjection();
         ubo.resolution = glm::vec2(m_OffscreenTarget->GetWidth(), m_OffscreenTarget->GetHeight());
@@ -260,6 +296,8 @@ private:
     std::unique_ptr<PixelEngine::Buffer> m_IndexBuffer;
     std::unique_ptr<PixelEngine::Buffer> m_QuadVertexBuffer;
     std::unique_ptr<PixelEngine::Buffer> m_QuadIndexBuffer;
+    std::unique_ptr<PixelEngine::Texture> m_Texture;
+    
     PixelEngine::Camera m_Camera;
     float m_Rotation = 0.0f;
 
@@ -268,6 +306,7 @@ private:
     bool m_PixelSnapping = true;
     glm::vec4 m_CubeColor = {1.0f, 1.0f, 1.0f, 1.0f};
     float m_RotationSpeed = 50.0f;
+    float m_CubeScale = 1.0f;
 };
 
 int main(int argc, char* argv[]) {

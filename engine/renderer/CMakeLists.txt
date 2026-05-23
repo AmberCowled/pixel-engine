@@ -12,6 +12,8 @@ add_library(engine-renderer STATIC
     Camera.cpp
     OffscreenTarget.hpp
     OffscreenTarget.cpp
+    Texture.hpp
+    Texture.cpp
     
     # ImGui Core
     ${imgui_SOURCE_DIR}/imgui.cpp
@@ -30,6 +32,7 @@ target_include_directories(engine-renderer PUBLIC
     ${imgui_SOURCE_DIR}
     ${imgui_SOURCE_DIR}/backends
     ${CMAKE_SOURCE_DIR} # Added project root for global engine/ includes
+    ${CMAKE_SOURCE_DIR}/third_party
 )
 
 target_link_libraries(engine-renderer 

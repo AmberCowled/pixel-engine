@@ -48,6 +48,7 @@ namespace PixelEngine {
         CreateDescriptorSetLayout();
         CreateUniformBuffers();
         CreateTextureSampler();
+        CreateDefaultTexture();
         CreateDescriptorSets();
         CreateQueryPool();
 
@@ -59,6 +60,14 @@ namespace PixelEngine {
             vkDeviceWaitIdle(m_Device);
             
             CleanupSwapchain();
+
+            if (m_DefaultImageView != VK_NULL_HANDLE) {
+                vkDestroyImageView(m_Device, m_DefaultImageView, nullptr);
+            }
+            if (m_DefaultImage != VK_NULL_HANDLE) {
+                vkDestroyImage(m_Device, m_DefaultImage, nullptr);
+                vkFreeMemory(m_Device, m_DefaultImageMemory, nullptr);
+            }
 
             if (m_QueryPool != VK_NULL_HANDLE) {
                 vkDestroyQueryPool(m_Device, m_QueryPool, nullptr);
@@ -576,7 +585,8 @@ namespace PixelEngine {
 
     VkSurfaceFormatKHR VulkanContext::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
         for (const auto& availableFormat : availableFormats) {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
+            if ((availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB || availableFormat.format == VK_FORMAT_R8G8B8A8_SRGB) && 
+                 availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR) {
                 return availableFormat;
             }
         }
@@ -632,7 +642,7 @@ namespace PixelEngine {
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
+        poolSizes[1].descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size()) * 2;
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
@@ -666,16 +676,21 @@ namespace PixelEngine {
     }
 
     void VulkanContext::CreateDescriptorSetLayout() {
-        VkDescriptorSetLayoutBinding uboLayoutBinding{};
-        uboLayoutBinding.binding = 0;
-        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        uboLayoutBinding.descriptorCount = 1;
-        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
+        bindings[0].binding = 0;
+        bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        bindings[0].descriptorCount = 1;
+        bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+        bindings[1].binding = 1;
+        bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        bindings[1].descriptorCount = 1;
+        bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
         VkDescriptorSetLayoutCreateInfo layoutInfo{};
         layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = 1;
-        layoutInfo.pBindings = &uboLayoutBinding;
+        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
+        layoutInfo.pBindings = bindings.data();
 
         if (vkCreateDescriptorSetLayout(m_Device, &layoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to create descriptor set layout!");
@@ -725,6 +740,53 @@ namespace PixelEngine {
         }
     }
 
+    void VulkanContext::CreateDefaultTexture() {
+        uint32_t white = 0xFFFFFFFF;
+        VkDeviceSize imageSize = 4;
+
+        Buffer staging(*this, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        staging.Map();
+        staging.WriteToBuffer(&white, imageSize);
+        staging.Unmap();
+
+        CreateImage(1, 1, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_DefaultImage, m_DefaultImageMemory);
+
+        // Transition & Copy (reusing logic from what will be in Texture.cpp but localized here for independence)
+        VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
+        
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.image = m_DefaultImage;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseMipLevel = 0;
+        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.srcAccessMask = 0;
+        barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        VkBufferImageCopy region{};
+        region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+        region.imageExtent = { 1, 1, 1 };
+        vkCmdCopyBufferToImage(commandBuffer, staging.GetBuffer(), m_DefaultImage, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1, &region);
+
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+        vkCmdPipelineBarrier(commandBuffer, VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0, 0, nullptr, 0, nullptr, 1, &barrier);
+
+        EndSingleTimeCommands(commandBuffer);
+
+        m_DefaultImageView = CreateImageView(m_DefaultImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+    }
+
     void VulkanContext::CreateDescriptorSets() {
         // UBO sets
         std::vector<VkDescriptorSetLayout> layouts(m_SwapchainImages.size(), m_DescriptorSetLayout);
@@ -743,14 +805,27 @@ namespace PixelEngine {
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(GlobalUBO);
 
-            VkWriteDescriptorSet descriptorWrite{};
-            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrite.dstSet = m_DescriptorSets[i];
-            descriptorWrite.dstBinding = 0;
-            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descriptorWrite.descriptorCount = 1;
-            descriptorWrite.pBufferInfo = &bufferInfo;
-            vkUpdateDescriptorSets(m_Device, 1, &descriptorWrite, 0, nullptr);
+            VkDescriptorImageInfo imageInfo{};
+            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            imageInfo.imageView = m_DefaultImageView;
+            imageInfo.sampler = m_TextureSampler;
+
+            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
+            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[0].dstSet = m_DescriptorSets[i];
+            descriptorWrites[0].dstBinding = 0;
+            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrites[0].descriptorCount = 1;
+            descriptorWrites[0].pBufferInfo = &bufferInfo;
+
+            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrites[1].dstSet = m_DescriptorSets[i];
+            descriptorWrites[1].dstBinding = 1;
+            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+            descriptorWrites[1].descriptorCount = 1;
+            descriptorWrites[1].pImageInfo = &imageInfo;
+
+            vkUpdateDescriptorSets(m_Device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
 
         // Upscale sets (will be updated by App once OffscreenTarget is ready)
@@ -763,6 +838,24 @@ namespace PixelEngine {
 
         m_UpscaleDescriptorSets.resize(m_SwapchainImages.size());
         vkAllocateDescriptorSets(m_Device, &upscaleAllocInfo, m_UpscaleDescriptorSets.data());
+    }
+
+    void VulkanContext::UpdateDescriptorSets(uint32_t imageIndex, VkImageView imageView) {
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = imageView;
+        imageInfo.sampler = m_TextureSampler;
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = m_DescriptorSets[imageIndex];
+        descriptorWrite.dstBinding = 1;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(m_Device, 1, &descriptorWrite, 0, nullptr);
     }
 
     void VulkanContext::UpdateUpscaleDescriptorSets(VkImageView colorImageView) {
@@ -877,6 +970,39 @@ namespace PixelEngine {
         VkImageView imageView;
         vkCreateImageView(m_Device, &viewInfo, nullptr, &imageView);
         return imageView;
+    }
+
+    VkCommandBuffer VulkanContext::BeginSingleTimeCommands() {
+        VkCommandBufferAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+        allocInfo.commandPool = m_CommandPool;
+        allocInfo.commandBufferCount = 1;
+
+        VkCommandBuffer commandBuffer;
+        vkAllocateCommandBuffers(m_Device, &allocInfo, &commandBuffer);
+
+        VkCommandBufferBeginInfo beginInfo{};
+        beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+        beginInfo.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+
+        vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+        return commandBuffer;
+    }
+
+    void VulkanContext::EndSingleTimeCommands(VkCommandBuffer commandBuffer) {
+        vkEndCommandBuffer(commandBuffer);
+
+        VkSubmitInfo submitInfo{};
+        submitInfo.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+        submitInfo.commandBufferCount = 1;
+        submitInfo.pCommandBuffers = &commandBuffer;
+
+        vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, VK_NULL_HANDLE);
+        vkQueueWaitIdle(m_GraphicsQueue);
+
+        vkFreeCommandBuffers(m_Device, m_CommandPool, 1, &commandBuffer);
     }
 
     bool VulkanContext::CheckValidationLayerSupport() {

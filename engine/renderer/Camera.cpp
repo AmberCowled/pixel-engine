@@ -16,6 +16,16 @@ namespace PixelEngine {
         m_ProjectionMatrix[3][2] = -(far * near) / (far - near);
     }
 
+    void Camera::SetOrthographicProjection(float left, float right, float top, float bottom, float near, float far) {
+        m_ProjectionMatrix = glm::mat4{1.0f};
+        m_ProjectionMatrix[0][0] = 2.f / (right - left);
+        m_ProjectionMatrix[1][1] = 2.f / (bottom - top);
+        m_ProjectionMatrix[2][2] = 1.f / (far - near);
+        m_ProjectionMatrix[3][0] = -(right + left) / (right - left);
+        m_ProjectionMatrix[3][1] = -(bottom + top) / (bottom - top);
+        m_ProjectionMatrix[3][2] = -near / (far - near);
+    }
+
     void Camera::SetViewDirection(glm::vec3 position, glm::vec3 direction, glm::vec3 up) {
         const glm::vec3 w{glm::normalize(direction)};
         const glm::vec3 u{glm::normalize(glm::cross(w, up))};
