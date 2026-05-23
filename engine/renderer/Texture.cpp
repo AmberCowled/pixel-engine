@@ -81,6 +81,12 @@ namespace PixelEngine {
 
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        } else if (oldLayout == VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL) {
+            barrier.srcAccessMask = VK_ACCESS_SHADER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+
+            sourceStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         } else {
             throw std::invalid_argument("unsupported layout transition!");
         }
@@ -127,6 +133,36 @@ namespace PixelEngine {
         );
 
         m_Context.EndSingleTimeCommands(commandBuffer);
+    }
+
+    void Texture::UpdateData(const std::string& path) {
+        int texWidth, texHeight, texChannels;
+        stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        
+        if (!pixels) {
+            PX_CORE_ERROR("Texture::UpdateData: Failed to load texture: {0}", path);
+            return;
+        }
+
+        if (static_cast<uint32_t>(texWidth) != m_Width || static_cast<uint32_t>(texHeight) != m_Height) {
+            PX_CORE_WARN("Texture::UpdateData: Dimension mismatch during reload for {0} (Expected {1}x{2}, got {3}x{4})", path, m_Width, m_Height, texWidth, texHeight);
+            stbi_image_free(pixels);
+            return;
+        }
+
+        VkDeviceSize imageSize = static_cast<VkDeviceSize>(m_Width) * m_Height * 4;
+        Buffer staging(m_Context, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT);
+        staging.Map();
+        staging.WriteToBuffer(pixels, imageSize);
+        staging.Unmap();
+
+        stbi_image_free(pixels);
+
+        TransitionImageLayout(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        CopyBufferToImage(staging.GetBuffer(), m_TextureImage, m_Width, m_Height);
+        TransitionImageLayout(m_TextureImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
+
+        PX_CORE_INFO("Texture::UpdateData: Successfully reloaded {0} in-place.", path);
     }
 
 }

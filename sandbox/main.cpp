@@ -13,6 +13,7 @@
 #include <engine/renderer/Renderer2D.hpp>
 #include <engine/renderer/ShaderHotReloader.hpp>
 #include <engine/assets/AssetManager.hpp>
+#include <engine/assets/AssetWatcher.hpp>
 #include <engine/ecs/Scene.hpp>
 #include <engine/ecs/Entity.hpp>
 #include <engine/ecs/Components.hpp>
@@ -38,6 +39,7 @@ public:
         // 2. Initialize Renderer2D & ShaderHotReloader
         PixelEngine::Renderer2D::Init(context);
         PixelEngine::ShaderHotReloader::Init("shaders");
+        PixelEngine::AssetWatcher::Init("assets");
 
         // 3. Create Offscreen Target (320x180)
         PixelEngine::OffscreenTargetConfig offscreenConfig{};
@@ -134,8 +136,8 @@ public:
     }
 
     void OnUpdate(float deltaTime) override {
-        // Run Shader Hot Reloader
-        PixelEngine::ShaderHotReloader::Update();
+        // Run Asset Watcher (automatically handles shaders and textures)
+        PixelEngine::AssetWatcher::Update();
 
         // Update ECS Systems (Velocity, Animations, etc.)
         m_ActiveScene->OnUpdate(deltaTime);
@@ -384,6 +386,34 @@ public:
             }
         }
 
+        ImGui::End();
+
+        // 4. Asset Database Window
+        ImGui::Begin("Asset Database");
+        auto& registry = PixelEngine::AssetManager::GetMetadataRegistry();
+        ImGui::Text("Total Registered Assets: %zu", registry.size());
+        ImGui::Separator();
+        
+        if (ImGui::BeginTable("AssetTable", 3, ImGuiTableFlags_Borders | ImGuiTableFlags_RowBg | ImGuiTableFlags_Resizable)) {
+            ImGui::TableSetupColumn("UUID");
+            ImGui::TableSetupColumn("Type");
+            ImGui::TableSetupColumn("Path");
+            ImGui::TableHeadersRow();
+
+            for (const auto& [uuid, meta] : registry) {
+                ImGui::TableNextRow();
+                ImGui::TableNextColumn();
+                ImGui::Text("%llu", (uint64_t)uuid);
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", meta.Type == PixelEngine::AssetType::Texture ? "Texture" :
+                                  meta.Type == PixelEngine::AssetType::Shader ? "Shader" :
+                                  meta.Type == PixelEngine::AssetType::Scene ? "Scene" :
+                                  meta.Type == PixelEngine::AssetType::Audio ? "Audio" : "None");
+                ImGui::TableNextColumn();
+                ImGui::Text("%s", meta.SourcePath.c_str());
+            }
+            ImGui::EndTable();
+        }
         ImGui::End();
 
         // Update Camera (Perspective for 3D)
