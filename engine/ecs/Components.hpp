@@ -7,6 +7,9 @@
 #include <glm/gtx/quaternion.hpp>
 #include <string>
 
+#include <engine/renderer/Material.hpp>
+#include <string>
+
 namespace PixelEngine {
 
     struct IDComponent {
@@ -40,12 +43,11 @@ namespace PixelEngine {
     };
 
     struct SpriteRendererComponent {
-        glm::vec4 Color{1.0f, 1.0f, 1.0f, 1.0f};
-        UUID TextureID = 0;
+        Material Mat;
         
         SpriteRendererComponent() = default;
         SpriteRendererComponent(const SpriteRendererComponent&) = default;
-        SpriteRendererComponent(const glm::vec4& color) : Color(color) {}
+        SpriteRendererComponent(const glm::vec4& color) { Mat.Color = color; }
     };
 
     struct MeshRendererComponent {

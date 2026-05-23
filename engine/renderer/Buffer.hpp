@@ -16,8 +16,9 @@ namespace PixelEngine {
 
         void WriteToBuffer(void* data, VkDeviceSize size = VK_WHOLE_SIZE, VkDeviceSize offset = 0);
         
-        VkBuffer GetBuffer() const { return m_Buffer; }
+                VkBuffer GetBuffer() const { return m_Buffer; }
         VkDeviceMemory GetMemory() const { return m_Memory; }
+        void* GetMapped() const { return m_Mapped; }
 
     private:
         VulkanContext& m_Context;

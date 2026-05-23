@@ -10,6 +10,8 @@
 #include <engine/renderer/OffscreenTarget.hpp>
 #include <engine/renderer/Camera.hpp>
 #include <engine/renderer/Texture.hpp>
+#include <engine/renderer/Renderer2D.hpp>
+#include <engine/renderer/ShaderHotReloader.hpp>
 #include <engine/assets/AssetManager.hpp>
 #include <engine/ecs/Scene.hpp>
 #include <engine/ecs/Entity.hpp>
@@ -32,7 +34,11 @@ public:
         // 1. Initialize Asset Manager
         PixelEngine::AssetManager::Init(context);
 
-        // 2. Create Offscreen Target (320x180)
+        // 2. Initialize Renderer2D & ShaderHotReloader
+        PixelEngine::Renderer2D::Init(context);
+        PixelEngine::ShaderHotReloader::Init("shaders");
+
+        // 3. Create Offscreen Target (320x180)
         PixelEngine::OffscreenTargetConfig offscreenConfig{};
         offscreenConfig.width = 320;
         offscreenConfig.height = 180;
@@ -47,10 +53,10 @@ public:
             context, offscreenConfig, context.GetOffscreenRenderPass()
         );
 
-        // 3. Link Offscreen Target to Upscale pipeline
+        // 4. Link Offscreen Target to Upscale pipeline
         context.UpdateUpscaleDescriptorSets(m_OffscreenTarget->GetColorImageView());
 
-        // 4. Create Geometry Buffers for Upscaling
+        // 5. Create Geometry Buffers for Upscaling
         VkDeviceSize quadVertexBufferSize = sizeof(PixelEngine::FULLSCREEN_TRIANGLE_VERTICES[0]) * PixelEngine::FULLSCREEN_TRIANGLE_VERTICES.size();
         m_QuadVertexBuffer = std::make_unique<PixelEngine::Buffer>(
             context, quadVertexBufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
@@ -67,7 +73,7 @@ public:
         m_QuadIndexBuffer->Map();
         m_QuadIndexBuffer->WriteToBuffer((void*)PixelEngine::FULLSCREEN_TRIANGLE_INDICES.data(), quadIndexBufferSize);
 
-        // 5. Create Upscale Pipeline
+        // 6. Create Upscale Pipeline
         std::vector<std::string> upscaleSearchPaths = {
             "shaders/",
             "../shaders/",
@@ -94,12 +100,12 @@ public:
             context, upscaleVert, upscaleFrag, upscaleConfig
         );
 
-        // 6. Initialize ECS Systems
+        // 7. Initialize ECS Systems
         m_ActiveScene = std::make_unique<PixelEngine::Scene>();
         m_RenderSystem = std::make_unique<PixelEngine::RenderSystem>(context);
 
-        // 7. Load Assets & Create Entities
-        PixelEngine::UUID testTexture = 0;
+        // 8. Load Assets & Create Entities
+        testTexture = 0;
         std::vector<std::string> searchPaths = { "assets/test.png", "../assets/test.png", "../../assets/test.png", "../../../assets/test.png" };
         for (const auto& path : searchPaths) {
             if (std::filesystem::exists(path)) {
@@ -116,16 +122,20 @@ public:
         // Floating Sprite Entity
         auto sprite = m_ActiveScene->CreateEntity("Floating Sprite");
         sprite.AddComponent<PixelEngine::SpriteRendererComponent>();
-        sprite.GetComponent<PixelEngine::SpriteRendererComponent>().TextureID = testTexture;
+        sprite.GetComponent<PixelEngine::SpriteRendererComponent>().Mat.TextureID = testTexture;
         sprite.GetComponent<PixelEngine::TransformComponent>().Translation = {2.0f, 0.0f, 0.0f};
     }
 
     ~SandboxApp() {
+        PixelEngine::Renderer2D::Shutdown();
         PixelEngine::AssetManager::Shutdown();
         PX_INFO("Sandbox App Shutdown.");
     }
 
     void OnUpdate(float deltaTime) override {
+        // Run Shader Hot Reloader
+        PixelEngine::ShaderHotReloader::Update();
+
         m_Rotation += deltaTime * m_RotationSpeed;
 
         auto& context = GetVulkanContext();
@@ -148,6 +158,23 @@ public:
         if (ImGui::Button("Add Sprite")) {
             auto e = m_ActiveScene->CreateEntity("New Sprite");
             e.AddComponent<PixelEngine::SpriteRendererComponent>();
+            e.GetComponent<PixelEngine::SpriteRendererComponent>().Mat.TextureID = testTexture;
+        }
+        if (ImGui::Button("Spawn 1000 Sprites")) {
+            for (int i = 0; i < 1000; i++) {
+                auto e = m_ActiveScene->CreateEntity("Stress Sprite " + std::to_string(i));
+                e.AddComponent<PixelEngine::SpriteRendererComponent>();
+                auto& tc = e.GetComponent<PixelEngine::TransformComponent>();
+                tc.Translation = {
+                    (rand() % 100 - 50) / 10.0f,
+                    (rand() % 100 - 50) / 10.0f,
+                    0.0f
+                };
+                tc.Scale = { 0.2f, 0.2f, 0.2f };
+                // Randomize blend mode (0 = Opaque, 1 = AlphaBlend, 2 = Additive)
+                e.GetComponent<PixelEngine::SpriteRendererComponent>().Mat.Blend = static_cast<PixelEngine::BlendMode>(rand() % 3);
+                e.GetComponent<PixelEngine::SpriteRendererComponent>().Mat.TextureID = testTexture;
+            }
         }
         ImGui::End();
 
@@ -178,7 +205,13 @@ public:
 
             if (m_SelectedEntity.HasComponent<PixelEngine::SpriteRendererComponent>()) {
                 auto& sc = m_SelectedEntity.GetComponent<PixelEngine::SpriteRendererComponent>();
-                ImGui::ColorEdit4("Sprite Color", &sc.Color.x);
+                ImGui::ColorEdit4("Sprite Color", &sc.Mat.Color.x);
+
+                const char* blendModes[] = { "Opaque", "AlphaBlend", "Additive" };
+                int currentBlend = static_cast<int>(sc.Mat.Blend);
+                if (ImGui::Combo("Blend Mode", &currentBlend, blendModes, 3)) {
+                    sc.Mat.Blend = static_cast<PixelEngine::BlendMode>(currentBlend);
+                }
             }
 
             if (ImGui::Button("Delete Entity")) {
@@ -193,6 +226,12 @@ public:
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
         ImGui::Text("CPU Time: %.3f ms", deltaTime * 1000.0f);
         ImGui::Text("GPU Time: %.3f ms", context.GetGPUTime());
+        
+        // Display Renderer2D stats
+        auto stats = PixelEngine::Renderer2D::GetStats();
+        ImGui::Text("Batch Draw Calls: %u", stats.DrawCalls);
+        ImGui::Text("Batch Quad Count: %u", stats.QuadCount);
+
         ImGui::Separator();
 
         bool resChanged = false;
@@ -327,6 +366,8 @@ private:
     glm::vec4 m_ObjectColor = {1.0f, 1.0f, 1.0f, 1.0f};
     float m_RotationSpeed = 50.0f;
     float m_ObjectScale = 1.0f;
+
+    PixelEngine::UUID testTexture;
 };
 
 int main(int argc, char* argv[]) {
