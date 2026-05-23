@@ -29,8 +29,14 @@ _deps/
 .DS_Store
 Thumbs.db
 
+# Log files
+*.log
+
 # Private documentation
 docs/private/
+
+# Antigravity config / settings
+.antigravitycli/
 
 # Compiled files
 *.obj

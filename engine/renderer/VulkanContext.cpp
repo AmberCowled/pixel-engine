@@ -10,21 +10,6 @@
 
 namespace PixelEngine {
 
-    static VKAPI_ATTR VkBool32 VKAPI_CALL DebugCallback(
-        VkDebugUtilsMessageSeverityFlagBitsEXT messageSeverity,
-        VkDebugUtilsMessageTypeFlagsEXT messageType,
-        const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
-        void* pUserData) {
-        
-        if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
-            PX_CORE_ERROR("Vulkan Validation Error: {0}", pCallbackData->pMessage);
-        } else if (messageSeverity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
-            PX_CORE_WARN("Vulkan Validation Warning: {0}", pCallbackData->pMessage);
-        }
-
-        return VK_FALSE;
-    }
-
     VulkanContext::~VulkanContext() {
         Shutdown();
     }
@@ -35,7 +20,6 @@ namespace PixelEngine {
         CreateSurface(window);
         PickPhysicalDevice();
         CreateLogicalDevice();
-        
         CreateSwapchain(window);
         CreateImageViews();
         CreateRenderPass();
@@ -79,11 +63,19 @@ namespace PixelEngine {
                 m_DescriptorPool = VK_NULL_HANDLE;
             }
 
-            if (m_DescriptorSetLayout != VK_NULL_HANDLE) {
-                vkDestroyDescriptorSetLayout(m_Device, m_DescriptorSetLayout, nullptr);
-                m_DescriptorSetLayout = VK_NULL_HANDLE;
+            if (m_TextureSampler != VK_NULL_HANDLE) {
+                vkDestroySampler(m_Device, m_TextureSampler, nullptr);
+                m_TextureSampler = VK_NULL_HANDLE;
             }
 
+            if (m_GlobalDescriptorSetLayout != VK_NULL_HANDLE) {
+                vkDestroyDescriptorSetLayout(m_Device, m_GlobalDescriptorSetLayout, nullptr);
+                m_GlobalDescriptorSetLayout = VK_NULL_HANDLE;
+            }
+            if (m_TextureDescriptorSetLayout != VK_NULL_HANDLE) {
+                vkDestroyDescriptorSetLayout(m_Device, m_TextureDescriptorSetLayout, nullptr);
+                m_TextureDescriptorSetLayout = VK_NULL_HANDLE;
+            }
             if (m_UpscaleDescriptorSetLayout != VK_NULL_HANDLE) {
                 vkDestroyDescriptorSetLayout(m_Device, m_UpscaleDescriptorSetLayout, nullptr);
                 m_UpscaleDescriptorSetLayout = VK_NULL_HANDLE;
@@ -93,22 +85,19 @@ namespace PixelEngine {
                 vkDestroyPipelineLayout(m_Device, m_PipelineLayout, nullptr);
                 m_PipelineLayout = VK_NULL_HANDLE;
             }
-
             if (m_UpscalePipelineLayout != VK_NULL_HANDLE) {
                 vkDestroyPipelineLayout(m_Device, m_UpscalePipelineLayout, nullptr);
                 m_UpscalePipelineLayout = VK_NULL_HANDLE;
             }
 
-            if (m_TextureSampler != VK_NULL_HANDLE) {
-                vkDestroySampler(m_Device, m_TextureSampler, nullptr);
-                m_TextureSampler = VK_NULL_HANDLE;
-            }
-
-            m_UniformBuffers.clear();
-
             if (m_CommandPool != VK_NULL_HANDLE) {
                 vkDestroyCommandPool(m_Device, m_CommandPool, nullptr);
                 m_CommandPool = VK_NULL_HANDLE;
+            }
+
+            if (m_OffscreenRenderPass != VK_NULL_HANDLE) {
+                vkDestroyRenderPass(m_Device, m_OffscreenRenderPass, nullptr);
+                m_OffscreenRenderPass = VK_NULL_HANDLE;
             }
 
             if (m_RenderPass != VK_NULL_HANDLE) {
@@ -116,10 +105,7 @@ namespace PixelEngine {
                 m_RenderPass = VK_NULL_HANDLE;
             }
 
-            if (m_OffscreenRenderPass != VK_NULL_HANDLE) {
-                vkDestroyRenderPass(m_Device, m_OffscreenRenderPass, nullptr);
-                m_OffscreenRenderPass = VK_NULL_HANDLE;
-            }
+            m_UniformBuffers.clear();
 
             vkDestroyDevice(m_Device, nullptr);
             m_Device = VK_NULL_HANDLE;
@@ -135,6 +121,7 @@ namespace PixelEngine {
             if (func != nullptr) {
                 func(m_Instance, m_DebugMessenger, nullptr);
             }
+            m_DebugMessenger = VK_NULL_HANDLE;
         }
 
         if (m_Instance != VK_NULL_HANDLE) {
@@ -145,14 +132,14 @@ namespace PixelEngine {
 
     void VulkanContext::CreateInstance() {
         if (m_EnableValidationLayers && !CheckValidationLayerSupport()) {
-            PX_CORE_ERROR("Vulkan validation layers requested, but not available!");
+            PX_CORE_CRITICAL("Validation layers requested, but not available!");
         }
 
         VkApplicationInfo appInfo{};
         appInfo.sType = VK_STRUCTURE_TYPE_APPLICATION_INFO;
         appInfo.pApplicationName = "Pixel Engine";
         appInfo.applicationVersion = VK_MAKE_VERSION(1, 0, 0);
-        appInfo.pEngineName = "No Engine";
+        appInfo.pEngineName = "Pixel Engine";
         appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
         appInfo.apiVersion = VK_API_VERSION_1_3;
 
@@ -183,33 +170,37 @@ namespace PixelEngine {
         createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
         createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
         createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-        createInfo.pfnUserCallback = DebugCallback;
+        createInfo.pfnUserCallback = [](VkDebugUtilsMessageSeverityFlagBitsEXT severity, VkDebugUtilsMessageTypeFlagsEXT type, const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData, void* pUserData) -> VkBool32 {
+            if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT) {
+                PX_CORE_ERROR("Vulkan Validation Error: {0}", pCallbackData->pMessage);
+            } else if (severity >= VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT) {
+                PX_CORE_WARN("Vulkan Validation Warning: {0}", pCallbackData->pMessage);
+            }
+            return VK_FALSE;
+        };
 
         auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(m_Instance, "vkCreateDebugUtilsMessengerEXT");
         if (func != nullptr) {
-            if (func(m_Instance, &createInfo, nullptr, &m_DebugMessenger) != VK_SUCCESS) {
-                PX_CORE_ERROR("Failed to set up debug messenger!");
-            }
-        } else {
-            PX_CORE_ERROR("vkCreateDebugUtilsMessengerEXT not found!");
+            func(m_Instance, &createInfo, nullptr, &m_DebugMessenger);
+        }
+    }
+
+    void VulkanContext::CreateSurface(SDL_Window* window) {
+        if (!SDL_Vulkan_CreateSurface(window, m_Instance, nullptr, &m_Surface)) {
+            PX_CORE_CRITICAL("Failed to create window surface!");
         }
     }
 
     void VulkanContext::PickPhysicalDevice() {
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(m_Instance, &deviceCount, nullptr);
-
-        if (deviceCount == 0) {
-            PX_CORE_CRITICAL("Failed to find GPUs with Vulkan support!");
-        }
-
+        if (deviceCount == 0) PX_CORE_CRITICAL("Failed to find GPUs with Vulkan support!");
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(m_Instance, &deviceCount, devices.data());
 
         for (const auto& device : devices) {
             VkPhysicalDeviceProperties deviceProperties;
             vkGetPhysicalDeviceProperties(device, &deviceProperties);
-
             if (deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU) {
                 m_PhysicalDevice = device;
                 PX_CORE_INFO("Selected GPU: {0}", deviceProperties.deviceName);
@@ -221,7 +212,7 @@ namespace PixelEngine {
             m_PhysicalDevice = devices[0];
             VkPhysicalDeviceProperties deviceProperties;
             vkGetPhysicalDeviceProperties(m_PhysicalDevice, &deviceProperties);
-            PX_CORE_WARN("No discrete GPU found, using: {0}", deviceProperties.deviceName);
+            PX_CORE_INFO("Selected GPU: {0}", deviceProperties.deviceName);
         }
     }
 
@@ -231,22 +222,13 @@ namespace PixelEngine {
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties(m_PhysicalDevice, &queueFamilyCount, queueFamilies.data());
 
-        bool found = false;
-        for (uint32_t i = 0; i < queueFamilyCount; i++) {
-            if (queueFamilies[i].queueFlags & VK_QUEUE_GRAPHICS_BIT) {
-                VkBool32 presentSupport = false;
-                vkGetPhysicalDeviceSurfaceSupportKHR(m_PhysicalDevice, i, m_Surface, &presentSupport);
-                
-                if (presentSupport) {
-                    m_GraphicsQueueFamily = i;
-                    found = true;
-                    break;
-                }
+        int i = 0;
+        for (const auto& queueFamily : queueFamilies) {
+            if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+                m_GraphicsQueueFamily = i;
+                break;
             }
-        }
-
-        if (!found) {
-            PX_CORE_CRITICAL("Could not find a queue family that supports both graphics and presentation!");
+            i++;
         }
 
         float queuePriority = 1.0f;
@@ -257,31 +239,23 @@ namespace PixelEngine {
         queueCreateInfo.pQueuePriorities = &queuePriority;
 
         VkPhysicalDeviceFeatures deviceFeatures{};
+        deviceFeatures.samplerAnisotropy = VK_FALSE;
 
         VkDeviceCreateInfo createInfo{};
         createInfo.sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO;
-        createInfo.pQueueCreateInfos = &queueCreateInfo;
         createInfo.queueCreateInfoCount = 1;
+        createInfo.pQueueCreateInfos = &queueCreateInfo;
         createInfo.pEnabledFeatures = &deviceFeatures;
 
-        const std::vector<const char*> deviceExtensions = {
-            VK_KHR_SWAPCHAIN_EXTENSION_NAME
-        };
+        std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
         createInfo.enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size());
         createInfo.ppEnabledExtensionNames = deviceExtensions.data();
-        createInfo.enabledLayerCount = 0;
 
         if (vkCreateDevice(m_PhysicalDevice, &createInfo, nullptr, &m_Device) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to create logical device!");
         }
 
         vkGetDeviceQueue(m_Device, m_GraphicsQueueFamily, 0, &m_GraphicsQueue);
-    }
-
-    void VulkanContext::CreateSurface(SDL_Window* window) {
-        if (SDL_Vulkan_CreateSurface(window, m_Instance, nullptr, &m_Surface) == false) {
-            PX_CORE_CRITICAL("Failed to create window surface! SDL_Error: {0}", SDL_GetError());
-        }
     }
 
     void VulkanContext::CreateSwapchain(SDL_Window* window) {
@@ -642,13 +616,13 @@ namespace PixelEngine {
         poolSizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
         poolSizes[0].descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size());
         poolSizes[1].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        poolSizes[1].descriptorCount = static_cast<uint32_t>(m_SwapchainImages.size()) * 2;
+        poolSizes[1].descriptorCount = 100; // Large enough for many textures
 
         VkDescriptorPoolCreateInfo poolInfo{};
         poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
         poolInfo.poolSizeCount = static_cast<uint32_t>(poolSizes.size());
         poolInfo.pPoolSizes = poolSizes.data();
-        poolInfo.maxSets = static_cast<uint32_t>(m_SwapchainImages.size()) * 2;
+        poolInfo.maxSets = 200; // Support many sets
 
         if (vkCreateDescriptorPool(m_Device, &poolInfo, nullptr, &m_DescriptorPool) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to create descriptor pool!");
@@ -676,46 +650,67 @@ namespace PixelEngine {
     }
 
     void VulkanContext::CreateDescriptorSetLayout() {
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings{};
-        bindings[0].binding = 0;
-        bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-        bindings[0].descriptorCount = 1;
-        bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        // Layout 0: Global UBO
+        VkDescriptorSetLayoutBinding uboLayoutBinding{};
+        uboLayoutBinding.binding = 0;
+        uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+        uboLayoutBinding.descriptorCount = 1;
+        uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
 
-        bindings[1].binding = 1;
-        bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        bindings[1].descriptorCount = 1;
-        bindings[1].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        VkDescriptorSetLayoutCreateInfo globalLayoutInfo{};
+        globalLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        globalLayoutInfo.bindingCount = 1;
+        globalLayoutInfo.pBindings = &uboLayoutBinding;
 
-        VkDescriptorSetLayoutCreateInfo layoutInfo{};
-        layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
-        layoutInfo.bindingCount = static_cast<uint32_t>(bindings.size());
-        layoutInfo.pBindings = bindings.data();
-
-        if (vkCreateDescriptorSetLayout(m_Device, &layoutInfo, nullptr, &m_DescriptorSetLayout) != VK_SUCCESS) {
-            PX_CORE_CRITICAL("Failed to create descriptor set layout!");
+        if (vkCreateDescriptorSetLayout(m_Device, &globalLayoutInfo, nullptr, &m_GlobalDescriptorSetLayout) != VK_SUCCESS) {
+            PX_CORE_CRITICAL("Failed to create global descriptor set layout!");
         }
 
+        // Layout 1: Texture Sampler
+        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
+        samplerLayoutBinding.binding = 0;
+        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        samplerLayoutBinding.descriptorCount = 1;
+        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+        VkDescriptorSetLayoutCreateInfo textureLayoutInfo{};
+        textureLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+        textureLayoutInfo.bindingCount = 1;
+        textureLayoutInfo.pBindings = &samplerLayoutBinding;
+
+        if (vkCreateDescriptorSetLayout(m_Device, &textureLayoutInfo, nullptr, &m_TextureDescriptorSetLayout) != VK_SUCCESS) {
+            PX_CORE_CRITICAL("Failed to create texture descriptor set layout!");
+        }
+
+        // Push Constants
+        VkPushConstantRange pushConstantRange{};
+        pushConstantRange.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+        pushConstantRange.offset = 0;
+        pushConstantRange.size = sizeof(PushConstantData);
+
+        std::array<VkDescriptorSetLayout, 2> layouts = { m_GlobalDescriptorSetLayout, m_TextureDescriptorSetLayout };
         VkPipelineLayoutCreateInfo pipelineLayoutInfo{};
         pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-        pipelineLayoutInfo.setLayoutCount = 1;
-        pipelineLayoutInfo.pSetLayouts = &m_DescriptorSetLayout;
+        pipelineLayoutInfo.setLayoutCount = static_cast<uint32_t>(layouts.size());
+        pipelineLayoutInfo.pSetLayouts = layouts.data();
+        pipelineLayoutInfo.pushConstantRangeCount = 1;
+        pipelineLayoutInfo.pPushConstantRanges = &pushConstantRange;
 
         if (vkCreatePipelineLayout(m_Device, &pipelineLayoutInfo, nullptr, &m_PipelineLayout) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to create pipeline layout!");
         }
 
-        // Upscale
-        VkDescriptorSetLayoutBinding samplerLayoutBinding{};
-        samplerLayoutBinding.binding = 0;
-        samplerLayoutBinding.descriptorCount = 1;
-        samplerLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        samplerLayoutBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+        // Upscale Layout
+        VkDescriptorSetLayoutBinding upscaleBinding{};
+        upscaleBinding.binding = 0;
+        upscaleBinding.descriptorCount = 1;
+        upscaleBinding.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        upscaleBinding.stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
 
         VkDescriptorSetLayoutCreateInfo upscaleLayoutInfo{};
         upscaleLayoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
         upscaleLayoutInfo.bindingCount = 1;
-        upscaleLayoutInfo.pBindings = &samplerLayoutBinding;
+        upscaleLayoutInfo.pBindings = &upscaleBinding;
 
         if (vkCreateDescriptorSetLayout(m_Device, &upscaleLayoutInfo, nullptr, &m_UpscaleDescriptorSetLayout) != VK_SUCCESS) {
             PX_CORE_CRITICAL("Failed to create upscale descriptor set layout!");
@@ -751,7 +746,7 @@ namespace PixelEngine {
 
         CreateImage(1, 1, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, m_DefaultImage, m_DefaultImageMemory);
 
-        // Transition & Copy (reusing logic from what will be in Texture.cpp but localized here for independence)
+        // Transition & Copy
         VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
         
         VkImageMemoryBarrier barrier{};
@@ -785,19 +780,55 @@ namespace PixelEngine {
         EndSingleTimeCommands(commandBuffer);
 
         m_DefaultImageView = CreateImageView(m_DefaultImage, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+        m_DefaultTextureDescriptorSet = CreateTextureDescriptorSet(m_DefaultImageView);
+    }
+
+    VkDescriptorSet VulkanContext::CreateTextureDescriptorSet(VkImageView imageView) {
+        if (imageView == VK_NULL_HANDLE) {
+            imageView = m_DefaultImageView;
+        }
+
+        VkDescriptorSetAllocateInfo allocInfo{};
+        allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+        allocInfo.descriptorPool = m_DescriptorPool;
+        allocInfo.descriptorSetCount = 1;
+        allocInfo.pSetLayouts = &m_TextureDescriptorSetLayout;
+
+        VkDescriptorSet descriptorSet;
+        if (vkAllocateDescriptorSets(m_Device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
+            return VK_NULL_HANDLE;
+        }
+
+        VkDescriptorImageInfo imageInfo{};
+        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        imageInfo.imageView = imageView;
+        imageInfo.sampler = m_TextureSampler;
+
+        VkWriteDescriptorSet descriptorWrite{};
+        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+        descriptorWrite.dstSet = descriptorSet;
+        descriptorWrite.dstBinding = 0;
+        descriptorWrite.dstArrayElement = 0;
+        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+        descriptorWrite.descriptorCount = 1;
+        descriptorWrite.pImageInfo = &imageInfo;
+
+        vkUpdateDescriptorSets(m_Device, 1, &descriptorWrite, 0, nullptr);
+
+        return descriptorSet;
     }
 
     void VulkanContext::CreateDescriptorSets() {
-        // UBO sets
-        std::vector<VkDescriptorSetLayout> layouts(m_SwapchainImages.size(), m_DescriptorSetLayout);
+        // Global UBO sets
+        std::vector<VkDescriptorSetLayout> layouts(m_SwapchainImages.size(), m_GlobalDescriptorSetLayout);
         VkDescriptorSetAllocateInfo allocInfo{};
         allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
         allocInfo.descriptorPool = m_DescriptorPool;
         allocInfo.descriptorSetCount = static_cast<uint32_t>(m_SwapchainImages.size());
         allocInfo.pSetLayouts = layouts.data();
 
-        m_DescriptorSets.resize(m_SwapchainImages.size());
-        vkAllocateDescriptorSets(m_Device, &allocInfo, m_DescriptorSets.data());
+        m_GlobalDescriptorSets.resize(m_SwapchainImages.size());
+        vkAllocateDescriptorSets(m_Device, &allocInfo, m_GlobalDescriptorSets.data());
 
         for (size_t i = 0; i < m_SwapchainImages.size(); i++) {
             VkDescriptorBufferInfo bufferInfo{};
@@ -805,30 +836,19 @@ namespace PixelEngine {
             bufferInfo.offset = 0;
             bufferInfo.range = sizeof(GlobalUBO);
 
-            VkDescriptorImageInfo imageInfo{};
-            imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-            imageInfo.imageView = m_DefaultImageView;
-            imageInfo.sampler = m_TextureSampler;
+            VkWriteDescriptorSet descriptorWrite{};
+            descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+            descriptorWrite.dstSet = m_GlobalDescriptorSets[i];
+            descriptorWrite.dstBinding = 0;
+            descriptorWrite.dstArrayElement = 0;
+            descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+            descriptorWrite.descriptorCount = 1;
+            descriptorWrite.pBufferInfo = &bufferInfo;
 
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites{};
-            descriptorWrites[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[0].dstSet = m_DescriptorSets[i];
-            descriptorWrites[0].dstBinding = 0;
-            descriptorWrites[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
-            descriptorWrites[0].descriptorCount = 1;
-            descriptorWrites[0].pBufferInfo = &bufferInfo;
-
-            descriptorWrites[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-            descriptorWrites[1].dstSet = m_DescriptorSets[i];
-            descriptorWrites[1].dstBinding = 1;
-            descriptorWrites[1].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-            descriptorWrites[1].descriptorCount = 1;
-            descriptorWrites[1].pImageInfo = &imageInfo;
-
-            vkUpdateDescriptorSets(m_Device, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
+            vkUpdateDescriptorSets(m_Device, 1, &descriptorWrite, 0, nullptr);
         }
 
-        // Upscale sets (will be updated by App once OffscreenTarget is ready)
+        // Upscale sets
         std::vector<VkDescriptorSetLayout> upscaleLayouts(m_SwapchainImages.size(), m_UpscaleDescriptorSetLayout);
         VkDescriptorSetAllocateInfo upscaleAllocInfo{};
         upscaleAllocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
@@ -838,24 +858,6 @@ namespace PixelEngine {
 
         m_UpscaleDescriptorSets.resize(m_SwapchainImages.size());
         vkAllocateDescriptorSets(m_Device, &upscaleAllocInfo, m_UpscaleDescriptorSets.data());
-    }
-
-    void VulkanContext::UpdateDescriptorSets(uint32_t imageIndex, VkImageView imageView) {
-        VkDescriptorImageInfo imageInfo{};
-        imageInfo.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
-        imageInfo.imageView = imageView;
-        imageInfo.sampler = m_TextureSampler;
-
-        VkWriteDescriptorSet descriptorWrite{};
-        descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
-        descriptorWrite.dstSet = m_DescriptorSets[imageIndex];
-        descriptorWrite.dstBinding = 1;
-        descriptorWrite.dstArrayElement = 0;
-        descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
-        descriptorWrite.descriptorCount = 1;
-        descriptorWrite.pImageInfo = &imageInfo;
-
-        vkUpdateDescriptorSets(m_Device, 1, &descriptorWrite, 0, nullptr);
     }
 
     void VulkanContext::UpdateUpscaleDescriptorSets(VkImageView colorImageView) {

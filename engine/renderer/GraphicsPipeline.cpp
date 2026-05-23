@@ -77,6 +77,7 @@ namespace PixelEngine {
 
         if (!file.is_open()) {
             PX_CORE_CRITICAL("Failed to open file: {0}", filePath);
+            throw std::runtime_error("Failed to open file: " + filePath);
         }
 
         size_t fileSize = (size_t)file.tellg();
