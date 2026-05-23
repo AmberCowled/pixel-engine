@@ -15,6 +15,7 @@
 #include <chrono>
 #include <iostream>
 #include <array>
+#include <filesystem>
 
 class SandboxApp : public PixelEngine::EngineApp {
 public:
@@ -110,16 +111,18 @@ public:
 
         bool loaded = false;
         for (const auto& path : searchPaths) {
-            try {
-                m_Texture = std::make_unique<PixelEngine::Texture>(context, path);
-                for (uint32_t i = 0; i < context.GetSwapchainImageCount(); i++) {
-                    context.UpdateDescriptorSets(i, m_Texture->GetImageView());
+            if (std::filesystem::exists(path)) {
+                try {
+                    m_Texture = std::make_unique<PixelEngine::Texture>(context, path);
+                    for (uint32_t i = 0; i < context.GetSwapchainImageCount(); i++) {
+                        context.UpdateDescriptorSets(i, m_Texture->GetImageView());
+                    }
+                    PX_INFO("Successfully loaded texture from: {0}", path);
+                    loaded = true;
+                    break;
+                } catch (...) {
+                    continue;
                 }
-                PX_INFO("Successfully loaded texture from: {0}", path);
-                loaded = true;
-                break;
-            } catch (...) {
-                continue;
             }
         }
 
