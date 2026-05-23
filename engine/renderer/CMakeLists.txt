@@ -14,8 +14,12 @@ add_library(engine-renderer STATIC
     OffscreenTarget.cpp
     Texture.hpp
     Texture.cpp
+    Material.hpp
+    Renderer2D.hpp
+    Renderer2D.cpp
+    ShaderHotReloader.hpp
+    ShaderHotReloader.cpp
     
-    # ImGui Core
     ${imgui_SOURCE_DIR}/imgui.cpp
     ${imgui_SOURCE_DIR}/imgui_draw.cpp
     ${imgui_SOURCE_DIR}/imgui_tables.cpp

@@ -20,12 +20,9 @@ namespace PixelEngine {
         VulkanContext& m_Context;
 
         std::unique_ptr<GraphicsPipeline> m_MeshPipeline;
-        std::unique_ptr<GraphicsPipeline> m_SpritePipeline;
 
         std::unique_ptr<Buffer> m_CubeVertexBuffer;
         std::unique_ptr<Buffer> m_CubeIndexBuffer;
-        std::unique_ptr<Buffer> m_SpriteVertexBuffer;
-        std::unique_ptr<Buffer> m_SpriteIndexBuffer;
 
         void CreatePipelines();
         void CreateDefaultMeshes();

@@ -9,8 +9,12 @@ namespace PixelEngine {
 
     struct Vertex {
         glm::vec3 pos;
-        glm::vec3 color;
+        glm::vec4 color;
         glm::vec2 uv;
+
+        Vertex() = default;
+        Vertex(glm::vec3 p, glm::vec4 c, glm::vec2 u) : pos(p), color(c), uv(u) {}
+        Vertex(glm::vec3 p, glm::vec3 c, glm::vec2 u) : pos(p), color(glm::vec4(c, 1.0f)), uv(u) {}
 
         static VkVertexInputBindingDescription GetBindingDescription() {
             VkVertexInputBindingDescription bindingDescription{};
@@ -30,7 +34,7 @@ namespace PixelEngine {
 
             attributeDescriptions[1].binding = 0;
             attributeDescriptions[1].location = 1;
-            attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
+            attributeDescriptions[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
             attributeDescriptions[1].offset = offsetof(Vertex, color);
 
             attributeDescriptions[2].binding = 0;
