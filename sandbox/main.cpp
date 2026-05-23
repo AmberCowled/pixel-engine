@@ -17,6 +17,7 @@
 #include <engine/ecs/Entity.hpp>
 #include <engine/ecs/Components.hpp>
 #include <engine/ecs/RenderSystem.hpp>
+#include <engine/ecs/SceneSerializer.hpp>
 #include <imgui.h>
 #include <glm/gtc/matrix_transform.hpp>
 #include <chrono>
@@ -136,6 +137,9 @@ public:
         // Run Shader Hot Reloader
         PixelEngine::ShaderHotReloader::Update();
 
+        // Update ECS Systems (Velocity, Animations, etc.)
+        m_ActiveScene->OnUpdate(deltaTime);
+
         m_Rotation += deltaTime * m_RotationSpeed;
 
         auto& context = GetVulkanContext();
@@ -214,6 +218,112 @@ public:
                 }
             }
 
+            // --- Phase 3 Components UI ---
+            
+            // 1. Velocity Component
+            ImGui::Separator();
+            if (m_SelectedEntity.HasComponent<PixelEngine::VelocityComponent>()) {
+                if (ImGui::TreeNodeEx("Velocity Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    auto& vc = m_SelectedEntity.GetComponent<PixelEngine::VelocityComponent>();
+                    ImGui::DragFloat3("Linear", &vc.Linear.x, 0.05f);
+                    ImGui::DragFloat3("Angular", &vc.Angular.x, 0.05f);
+                    if (ImGui::Button("Remove Velocity")) {
+                        m_SelectedEntity.RemoveComponent<PixelEngine::VelocityComponent>();
+                    }
+                    ImGui::TreePop();
+                }
+            } else {
+                if (ImGui::Button("Add Velocity Component")) {
+                    m_SelectedEntity.AddComponent<PixelEngine::VelocityComponent>();
+                }
+            }
+
+            // 2. Hierarchy Component
+            ImGui::Separator();
+            if (m_SelectedEntity.HasComponent<PixelEngine::HierarchyComponent>()) {
+                if (ImGui::TreeNodeEx("Hierarchy Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    auto& hc = m_SelectedEntity.GetComponent<PixelEngine::HierarchyComponent>();
+                    if (hc.Parent != 0) {
+                        auto parentEntity = m_ActiveScene->GetEntityByUUID(hc.Parent);
+                        if (parentEntity) {
+                            auto& parentTag = parentEntity.GetComponent<PixelEngine::TagComponent>();
+                            ImGui::Text("Parent: %s", parentTag.Tag.c_str());
+                        } else {
+                            ImGui::Text("Parent UUID: %llu (not found)", (uint64_t)hc.Parent);
+                        }
+                        if (ImGui::Button("Clear Parent")) {
+                            auto parentEnt = m_ActiveScene->GetEntityByUUID(hc.Parent);
+                            if (parentEnt && parentEnt.HasComponent<PixelEngine::HierarchyComponent>()) {
+                                auto& parentHc = parentEnt.GetComponent<PixelEngine::HierarchyComponent>();
+                                auto myUUID = m_SelectedEntity.GetComponent<PixelEngine::IDComponent>().ID;
+                                parentHc.Children.erase(std::remove(parentHc.Children.begin(), parentHc.Children.end(), myUUID), parentHc.Children.end());
+                            }
+                            hc.Parent = 0;
+                        }
+                    } else {
+                        ImGui::Text("No Parent");
+                    }
+
+                    if (ImGui::BeginCombo("Select Parent", "Choose Parent...")) {
+                        auto tagView = m_ActiveScene->Reg().view<PixelEngine::TagComponent, PixelEngine::IDComponent>();
+                        for (auto ent : tagView) {
+                            if (ent == m_SelectedEntity) continue;
+                            auto& otherTag = tagView.get<PixelEngine::TagComponent>(ent);
+                            auto otherUUID = tagView.get<PixelEngine::IDComponent>(ent).ID;
+                            if (ImGui::Selectable(otherTag.Tag.c_str())) {
+                                hc.Parent = otherUUID;
+                                PixelEngine::Entity parentEnt = { ent, m_ActiveScene.get() };
+                                if (!parentEnt.HasComponent<PixelEngine::HierarchyComponent>()) {
+                                    parentEnt.AddComponent<PixelEngine::HierarchyComponent>();
+                                }
+                                auto& parentHc = parentEnt.GetComponent<PixelEngine::HierarchyComponent>();
+                                auto myUUID = m_SelectedEntity.GetComponent<PixelEngine::IDComponent>().ID;
+                                if (std::find(parentHc.Children.begin(), parentHc.Children.end(), myUUID) == parentHc.Children.end()) {
+                                    parentHc.Children.push_back(myUUID);
+                                }
+                            }
+                        }
+                        ImGui::EndCombo();
+                    }
+                    ImGui::TreePop();
+                }
+            } else {
+                if (ImGui::Button("Add Hierarchy Component")) {
+                    m_SelectedEntity.AddComponent<PixelEngine::HierarchyComponent>();
+                }
+            }
+
+            // 3. Sprite Animation Component
+            ImGui::Separator();
+            if (m_SelectedEntity.HasComponent<PixelEngine::SpriteAnimationComponent>()) {
+                if (ImGui::TreeNodeEx("Sprite Animation Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    auto& ac = m_SelectedEntity.GetComponent<PixelEngine::SpriteAnimationComponent>();
+                    ImGui::Checkbox("Playing", &ac.Playing);
+                    ImGui::Checkbox("Loop", &ac.Loop);
+                    ImGui::SliderFloat("Frame Duration", &ac.FrameTime, 0.05f, 2.0f);
+                    ImGui::Text("Frame Count: %d", (int)ac.Textures.size());
+                    
+                    if (ImGui::Button("Setup Test Anim (Blink)")) {
+                        ac.Textures.clear();
+                        ac.Textures.push_back(testTexture);
+                        ac.Textures.push_back(0); // white/none texture ID
+                        ac.CurrentFrame = 0;
+                        ac.Timer = 0.0f;
+                        ac.Playing = true;
+                    }
+                    if (ImGui::Button("Remove Animation")) {
+                        m_SelectedEntity.RemoveComponent<PixelEngine::SpriteAnimationComponent>();
+                    }
+                    ImGui::TreePop();
+                }
+            } else {
+                if (ImGui::Button("Add Animation Component")) {
+                    m_SelectedEntity.AddComponent<PixelEngine::SpriteAnimationComponent>();
+                }
+            }
+
+            ImGui::Separator();
+
             if (ImGui::Button("Delete Entity")) {
                 m_ActiveScene->DestroyEntity(m_SelectedEntity);
                 m_SelectedEntity = {};
@@ -260,6 +370,19 @@ public:
 
         ImGui::Checkbox("Pixel Snapping", &m_PixelSnapping);
         ImGui::SliderFloat("Rotation Speed", &m_RotationSpeed, 0.0f, 200.0f);
+
+        ImGui::Separator();
+        if (ImGui::Button("Save Scene")) {
+            PixelEngine::SceneSerializer serializer(*m_ActiveScene);
+            serializer.Serialize("assets/scenes/sandbox_scene.json");
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Load Scene")) {
+            PixelEngine::SceneSerializer serializer(*m_ActiveScene);
+            if (serializer.Deserialize("assets/scenes/sandbox_scene.json")) {
+                m_SelectedEntity = {}; // Reset selection as entities were re-created
+            }
+        }
 
         ImGui::End();
 

@@ -59,4 +59,34 @@ namespace PixelEngine {
         MeshRendererComponent(const glm::vec4& color) : Color(color) {}
     };
 
+    struct HierarchyComponent {
+        UUID Parent = 0;
+        std::vector<UUID> Children;
+
+        HierarchyComponent() = default;
+        HierarchyComponent(const HierarchyComponent&) = default;
+        HierarchyComponent(UUID parent) : Parent(parent) {}
+    };
+
+    struct VelocityComponent {
+        glm::vec3 Linear{0.0f, 0.0f, 0.0f};
+        glm::vec3 Angular{0.0f, 0.0f, 0.0f};
+
+        VelocityComponent() = default;
+        VelocityComponent(const VelocityComponent&) = default;
+        VelocityComponent(const glm::vec3& linear) : Linear(linear) {}
+    };
+
+    struct SpriteAnimationComponent {
+        std::vector<UUID> Textures;
+        float FrameTime = 0.1f;
+        int CurrentFrame = 0;
+        float Timer = 0.0f;
+        bool Loop = true;
+        bool Playing = true;
+
+        SpriteAnimationComponent() = default;
+        SpriteAnimationComponent(const SpriteAnimationComponent&) = default;
+    };
+
 }
