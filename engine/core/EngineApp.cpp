@@ -127,6 +127,10 @@ namespace PixelEngine {
                 m_Running = false;
             }
 
+            if (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED && event.window.windowID == SDL_GetWindowID(m_Window)) {
+                m_FramebufferResized = true;
+            }
+
             OnEvent(event);
         }
     }
@@ -188,18 +192,31 @@ namespace PixelEngine {
     }
 
     void EngineApp::BeginFrame() {
+        if (m_FramebufferResized) {
+            m_VulkanContext->RecreateSwapchain(m_Window);
+            m_FramebufferResized = false;
+        }
+
         vkWaitForFences(m_VulkanContext->GetDevice(), 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
         
         if (m_FrameHasFinished[m_CurrentFrame]) {
             m_VulkanContext->FetchQueryResults(m_ImageIndexHistory[m_CurrentFrame]);
         }
 
+        static uint32_t acquireSemIndex = 0;
+        VkResult result = m_VulkanContext->AcquireNextImage(m_ImageAvailableSemaphores[acquireSemIndex], &m_ImageIndex);
+        
+        if (result == VK_ERROR_OUT_OF_DATE_KHR) {
+            m_VulkanContext->RecreateSwapchain(m_Window);
+            result = m_VulkanContext->AcquireNextImage(m_ImageAvailableSemaphores[acquireSemIndex], &m_ImageIndex);
+        }
+        
+        if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR) {
+            PX_CORE_ERROR("Failed to acquire swapchain image!");
+        }
+
         vkResetFences(m_VulkanContext->GetDevice(), 1, &m_InFlightFences[m_CurrentFrame]);
 
-        // Use a rotating set of semaphores for acquisition to avoid re-signaling while in use by swapchain
-        static uint32_t acquireSemIndex = 0;
-        m_ImageIndex = m_VulkanContext->AcquireNextImage(m_ImageAvailableSemaphores[acquireSemIndex]);
-        
         m_CurrentAcquireSemIndex = acquireSemIndex;
         acquireSemIndex = (acquireSemIndex + 1) % MAX_SWAPCHAIN_IMAGES;
 
@@ -260,7 +277,15 @@ namespace PixelEngine {
         m_FrameHasFinished[m_CurrentFrame] = true;
 
         m_VulkanContext->SubmitCommandBuffer(m_ImageIndex, m_ImageAvailableSemaphores[m_CurrentAcquireSemIndex], m_RenderFinishedSemaphores[m_ImageIndex], m_InFlightFences[m_CurrentFrame]);
-        m_VulkanContext->PresentImage(m_ImageIndex, m_RenderFinishedSemaphores[m_ImageIndex]);
+        
+        VkResult result = m_VulkanContext->PresentImage(m_ImageIndex, m_RenderFinishedSemaphores[m_ImageIndex]);
+        
+        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || m_FramebufferResized) {
+            m_FramebufferResized = false;
+            m_VulkanContext->RecreateSwapchain(m_Window);
+        } else if (result != VK_SUCCESS) {
+            PX_CORE_ERROR("Failed to present swapchain image!");
+        }
 
         m_CurrentFrame = (m_CurrentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
     }

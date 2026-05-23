@@ -43,6 +43,7 @@ namespace PixelEngine {
         SDL_Window* m_Window = nullptr;
         AppConfig m_Config;
         std::unique_ptr<VulkanContext> m_VulkanContext;
+        bool m_FramebufferResized = false;
 
     private:
         void ProcessEvents();

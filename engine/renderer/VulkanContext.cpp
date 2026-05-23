@@ -2,6 +2,7 @@
 #include <engine/base/Log.hpp>
 #include <engine/renderer/UBO.hpp>
 #include <SDL3/SDL_vulkan.h>
+#include <SDL3/SDL.h>
 #include <set>
 #include <string>
 #include <algorithm>
@@ -557,6 +558,24 @@ namespace PixelEngine {
         }
     }
 
+    void VulkanContext::RecreateSwapchain(SDL_Window* window) {
+        int width = 0, height = 0;
+        SDL_GetWindowSizeInPixels(window, &width, &height);
+        while (width == 0 || height == 0) {
+            SDL_GetWindowSizeInPixels(window, &width, &height);
+            SDL_Delay(1);
+        }
+
+        vkDeviceWaitIdle(m_Device);
+
+        CleanupSwapchain();
+
+        CreateSwapchain(window);
+        CreateImageViews();
+        CreateDepthResources();
+        CreateFramebuffers();
+    }
+
     VkSurfaceFormatKHR VulkanContext::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) {
         for (const auto& availableFormat : availableFormats) {
             if ((availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB || availableFormat.format == VK_FORMAT_R8G8B8A8_SRGB) && 
@@ -880,10 +899,8 @@ namespace PixelEngine {
         }
     }
 
-    uint32_t VulkanContext::AcquireNextImage(VkSemaphore signalSemaphore) {
-        uint32_t imageIndex;
-        if (vkAcquireNextImageKHR(m_Device, m_Swapchain, UINT64_MAX, signalSemaphore, VK_NULL_HANDLE, &imageIndex) == VK_ERROR_OUT_OF_DATE_KHR) return 0;
-        return imageIndex;
+    VkResult VulkanContext::AcquireNextImage(VkSemaphore signalSemaphore, uint32_t* imageIndex) {
+        return vkAcquireNextImageKHR(m_Device, m_Swapchain, UINT64_MAX, signalSemaphore, VK_NULL_HANDLE, imageIndex);
     }
 
     void VulkanContext::SubmitCommandBuffer(uint32_t imageIndex, VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence fence) {
@@ -902,7 +919,7 @@ namespace PixelEngine {
         vkQueueSubmit(m_GraphicsQueue, 1, &submitInfo, fence);
     }
 
-    void VulkanContext::PresentImage(uint32_t imageIndex, VkSemaphore waitSemaphore) {
+    VkResult VulkanContext::PresentImage(uint32_t imageIndex, VkSemaphore waitSemaphore) {
         VkPresentInfoKHR presentInfo{};
         presentInfo.sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR;
         VkSemaphore waitSemaphores[] = { waitSemaphore };
@@ -912,7 +929,7 @@ namespace PixelEngine {
         presentInfo.swapchainCount = 1;
         presentInfo.pSwapchains = swapchains;
         presentInfo.pImageIndices = &imageIndex;
-        vkQueuePresentKHR(m_GraphicsQueue, &presentInfo);
+        return vkQueuePresentKHR(m_GraphicsQueue, &presentInfo);
     }
 
     uint32_t VulkanContext::FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
