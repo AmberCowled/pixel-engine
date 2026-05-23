@@ -46,7 +46,13 @@ namespace PixelEngine {
         void SubmitCommandBuffer(uint32_t imageIndex, VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence fence);
         void PresentImage(uint32_t imageIndex, VkSemaphore waitSemaphore);
 
+        void ResetQueryPool(VkCommandBuffer commandBuffer, uint32_t imageIndex);
+        void WriteTimestamp(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, uint32_t imageIndex, uint32_t queryIndex);
+        void FetchQueryResults(uint32_t imageIndex);
+
         void UpdateUpscaleDescriptorSets(VkImageView colorImageView);
+
+        float GetGPUTime() const { return m_GPUTime; }
 
         uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
         VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features);
@@ -74,6 +80,7 @@ namespace PixelEngine {
         void CreateDescriptorSets();
         void CreateTextureSampler();
         void CreateSyncObjects();
+        void CreateQueryPool();
 
         void CleanupSwapchain();
         void RecreateSwapchain(SDL_Window* window);
@@ -95,6 +102,11 @@ namespace PixelEngine {
 
         VkQueue m_GraphicsQueue = VK_NULL_HANDLE;
         uint32_t m_GraphicsQueueFamily = 0;
+
+        // Profiling
+        VkQueryPool m_QueryPool = VK_NULL_HANDLE;
+        float m_TimestampPeriod = 0.0f;
+        float m_GPUTime = 0.0f;
 
         // Swapchain
         VkSwapchainKHR m_Swapchain = VK_NULL_HANDLE;

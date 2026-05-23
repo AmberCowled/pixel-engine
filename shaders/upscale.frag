@@ -8,5 +8,11 @@ layout(location = 0) out vec4 outColor;
 layout(binding = 0) uniform sampler2D texSampler;
 
 void main() {
-    outColor = texture(texSampler, inUV);
+    vec4 color = texture(texSampler, inUV);
+    
+    // Simple Posterization (Optional Polish)
+    float levels = 8.0;
+    color.rgb = floor(color.rgb * levels) / levels;
+    
+    outColor = color;
 }

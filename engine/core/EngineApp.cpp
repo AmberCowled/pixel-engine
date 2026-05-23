@@ -189,6 +189,11 @@ namespace PixelEngine {
 
     void EngineApp::BeginFrame() {
         vkWaitForFences(m_VulkanContext->GetDevice(), 1, &m_InFlightFences[m_CurrentFrame], VK_TRUE, UINT64_MAX);
+        
+        if (m_FrameHasFinished[m_CurrentFrame]) {
+            m_VulkanContext->FetchQueryResults(m_ImageIndexHistory[m_CurrentFrame]);
+        }
+
         vkResetFences(m_VulkanContext->GetDevice(), 1, &m_InFlightFences[m_CurrentFrame]);
 
         // Use a rotating set of semaphores for acquisition to avoid re-signaling while in use by swapchain
@@ -204,6 +209,9 @@ namespace PixelEngine {
         VkCommandBufferBeginInfo beginInfo{};
         beginInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
         vkBeginCommandBuffer(commandBuffer, &beginInfo);
+
+        m_VulkanContext->ResetQueryPool(commandBuffer, m_ImageIndex);
+        m_VulkanContext->WriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, m_ImageIndex, 0);
 
         ImGui_ImplVulkan_NewFrame();
         ImGui_ImplSDL3_NewFrame();
@@ -243,8 +251,13 @@ namespace PixelEngine {
         // End the active render pass
         vkCmdEndRenderPass(commandBuffer);
         
+        m_VulkanContext->WriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, m_ImageIndex, 1);
+
         // Now it's safe to end the command buffer
         vkEndCommandBuffer(commandBuffer);
+
+        m_ImageIndexHistory[m_CurrentFrame] = m_ImageIndex;
+        m_FrameHasFinished[m_CurrentFrame] = true;
 
         m_VulkanContext->SubmitCommandBuffer(m_ImageIndex, m_ImageAvailableSemaphores[m_CurrentAcquireSemIndex], m_RenderFinishedSemaphores[m_ImageIndex], m_InFlightFences[m_CurrentFrame]);
         m_VulkanContext->PresentImage(m_ImageIndex, m_RenderFinishedSemaphores[m_ImageIndex]);

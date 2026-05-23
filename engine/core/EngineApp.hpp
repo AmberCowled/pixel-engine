@@ -65,6 +65,9 @@ namespace PixelEngine {
         VkSemaphore m_ImageAvailableSemaphores[MAX_SWAPCHAIN_IMAGES];
         VkSemaphore m_RenderFinishedSemaphores[MAX_SWAPCHAIN_IMAGES];
         VkFence m_InFlightFences[MAX_FRAMES_IN_FLIGHT];
+
+        uint32_t m_ImageIndexHistory[MAX_FRAMES_IN_FLIGHT]{};
+        bool m_FrameHasFinished[MAX_FRAMES_IN_FLIGHT]{};
     };
 
     // To be defined in client

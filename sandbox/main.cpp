@@ -112,7 +112,8 @@ public:
         // UI
         ImGui::Begin("Engine Controls");
         ImGui::Text("FPS: %.1f", ImGui::GetIO().Framerate);
-        ImGui::Text("DeltaTime: %.3f ms", deltaTime * 1000.0f);
+        ImGui::Text("CPU Time: %.3f ms", deltaTime * 1000.0f);
+        ImGui::Text("GPU Time: %.3f ms", context.GetGPUTime());
         ImGui::Separator();
 
         bool resChanged = false;
@@ -158,9 +159,8 @@ public:
         ubo.pixelSnapping = m_PixelSnapping ? 1.0f : 0.0f;
         ubo.baseColor = m_CubeColor;
 
-        for (size_t i = 0; i < context.GetSwapchainImageCount(); i++) {
-            context.GetUniformBuffer((uint32_t)i).WriteToBuffer(&ubo, sizeof(ubo));
-        }
+        uint32_t imageIndex = GetCurrentImageIndex();
+        context.GetUniformBuffer(imageIndex).WriteToBuffer(&ubo, sizeof(ubo));
 
         ImGui::ShowDemoWindow();
     }
