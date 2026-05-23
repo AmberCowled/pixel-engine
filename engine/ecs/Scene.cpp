@@ -1,12 +1,26 @@
 #include "Scene.hpp"
 #include "Entity.hpp"
 #include "Components.hpp"
+#include "SceneSerializer.hpp"
 
 namespace PixelEngine {
 
     Scene::Scene() {}
 
     Scene::~Scene() {}
+
+    std::shared_ptr<Scene> Scene::Clone(std::shared_ptr<Scene> source) {
+        std::shared_ptr<Scene> dest = std::make_shared<Scene>();
+        if (!source) return dest;
+
+        SceneSerializer srcSerializer(*source);
+        nlohmann::json data = srcSerializer.SerializeToJson();
+
+        SceneSerializer destSerializer(*dest);
+        destSerializer.DeserializeFromJson(data);
+
+        return dest;
+    }
 
     Entity Scene::CreateEntity(const std::string& name) {
         return CreateEntityWithUUID(UUID(), name);

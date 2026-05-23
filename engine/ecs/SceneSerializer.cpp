@@ -29,7 +29,7 @@ namespace PixelEngine {
         return glm::vec4(j[0].get<float>(), j[1].get<float>(), j[2].get<float>(), j[3].get<float>());
     }
 
-    void SceneSerializer::Serialize(const std::string& filepath) {
+    nlohmann::json SceneSerializer::SerializeToJson() {
         json outJson;
         outJson["SceneName"] = "Untitled Scene";
 
@@ -123,6 +123,11 @@ namespace PixelEngine {
         }
 
         outJson["Entities"] = entitiesJson;
+        return outJson;
+    }
+
+    void SceneSerializer::Serialize(const std::string& filepath) {
+        json outJson = SerializeToJson();
 
         std::filesystem::path path(filepath);
         if (!path.parent_path().empty()) {
@@ -138,23 +143,7 @@ namespace PixelEngine {
         }
     }
 
-    bool SceneSerializer::Deserialize(const std::string& filepath) {
-        std::ifstream fin(filepath);
-        if (!fin.is_open()) {
-            PX_CORE_WARN("Failed to open scene file for deserialization: {0}", filepath);
-            return false;
-        }
-
-        json sceneJson;
-        try {
-            fin >> sceneJson;
-        } catch (const std::exception& e) {
-            PX_CORE_ERROR("Failed to parse scene JSON from file {0}: {1}", filepath, e.what());
-            return false;
-        }
-
-        PX_CORE_INFO("Deserializing scene from: {0}", filepath);
-
+    bool SceneSerializer::DeserializeFromJson(const nlohmann::json& sceneJson) {
         // Clear existing scene data
         m_Scene.Reg().clear();
         m_Scene.m_EntityMap.clear();
@@ -226,9 +215,30 @@ namespace PixelEngine {
                 ac.Playing = acJson.value("Playing", true);
             }
         }
-
-        PX_CORE_INFO("Scene deserialized successfully. Total entities: {0}", m_Scene.GetEntityMap().size());
         return true;
+    }
+
+    bool SceneSerializer::Deserialize(const std::string& filepath) {
+        std::ifstream fin(filepath);
+        if (!fin.is_open()) {
+            PX_CORE_WARN("Failed to open scene file for deserialization: {0}", filepath);
+            return false;
+        }
+
+        json sceneJson;
+        try {
+            fin >> sceneJson;
+        } catch (const std::exception& e) {
+            PX_CORE_ERROR("Failed to parse scene JSON from file {0}: {1}", filepath, e.what());
+            return false;
+        }
+
+        PX_CORE_INFO("Deserializing scene from: {0}", filepath);
+        bool success = DeserializeFromJson(sceneJson);
+        if (success) {
+            PX_CORE_INFO("Scene deserialized successfully. Total entities: {0}", m_Scene.GetEntityMap().size());
+        }
+        return success;
     }
 
 }

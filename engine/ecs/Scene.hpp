@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <engine/core/UUID.hpp>
 #include <glm/glm.hpp>
+#include <memory>
 
 namespace PixelEngine {
 
@@ -14,6 +15,8 @@ namespace PixelEngine {
     public:
         Scene();
         ~Scene();
+
+        static std::shared_ptr<Scene> Clone(std::shared_ptr<Scene> source);
 
         Entity CreateEntity(const std::string& name = std::string());
         Entity CreateEntityWithUUID(UUID uuid, const std::string& name = std::string());

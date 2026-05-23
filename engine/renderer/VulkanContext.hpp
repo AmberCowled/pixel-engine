@@ -48,9 +48,10 @@ namespace PixelEngine {
         Buffer& GetUniformBuffer(uint32_t index) { return *m_UniformBuffers[index]; }
         VkDescriptorSet GetDefaultTextureDescriptorSet() const { return m_DefaultTextureDescriptorSet; }
 
-        uint32_t AcquireNextImage(VkSemaphore signalSemaphore);
+        VkResult AcquireNextImage(VkSemaphore signalSemaphore, uint32_t* imageIndex);
         void SubmitCommandBuffer(uint32_t imageIndex, VkSemaphore waitSemaphore, VkSemaphore signalSemaphore, VkFence fence);
-        void PresentImage(uint32_t imageIndex, VkSemaphore waitSemaphore);
+        VkResult PresentImage(uint32_t imageIndex, VkSemaphore waitSemaphore);
+        void RecreateSwapchain(SDL_Window* window);
 
         void ResetQueryPool(VkCommandBuffer commandBuffer, uint32_t imageIndex);
         void WriteTimestamp(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, uint32_t imageIndex, uint32_t queryIndex);
@@ -93,7 +94,6 @@ namespace PixelEngine {
         void CreateQueryPool();
 
         void CleanupSwapchain();
-        void RecreateSwapchain(SDL_Window* window);
 
         bool CheckValidationLayerSupport();
         std::vector<const char*> GetRequiredExtensions();
