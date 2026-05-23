@@ -17,6 +17,8 @@ namespace PixelEngine {
         uint32_t GetWidth() const { return m_Width; }
         uint32_t GetHeight() const { return m_Height; }
 
+        void UpdateData(const std::string& path);
+
     private:
         void CreateTextureImage(const std::string& path);
         void CreateTextureImageView();

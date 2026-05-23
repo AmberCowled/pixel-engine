@@ -121,6 +121,7 @@ namespace PixelEngine {
     void Renderer2D::RecreatePipelines() {
         if (!s_Context) return;
         PX_CORE_INFO("Renderer2D: Recreating sprite pipelines...");
+        vkDeviceWaitIdle(s_Context->GetDevice());
         s_SpritePipelineOpaque.reset();
         s_SpritePipelineAlphaBlend.reset();
         s_SpritePipelineAdditive.reset();
