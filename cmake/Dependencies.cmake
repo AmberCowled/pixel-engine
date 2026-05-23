@@ -43,5 +43,12 @@ CPMAddPackage(
     GIT_TAG v3.13.0
 )
 
+# nlohmann_json - JSON serialization
+CPMAddPackage(
+    NAME nlohmann_json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.11.2
+)
+
 # Vulkan SDK
 find_package(Vulkan REQUIRED)

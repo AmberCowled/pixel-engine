@@ -1,5 +1,6 @@
 #include "RenderSystem.hpp"
 #include "Components.hpp"
+#include "Entity.hpp"
 #include <engine/renderer/CubeData.hpp>
 #include <engine/renderer/Renderer2D.hpp>
 #include <engine/assets/AssetManager.hpp>
@@ -80,7 +81,7 @@ namespace PixelEngine {
 
             // Push Constants
             PushConstantData push{};
-            push.model = transform.GetTransform();
+            push.model = scene.GetWorldTransform({entity, &scene});
             push.color = mesh.Color;
             vkCmdPushConstants(commandBuffer, m_Context.GetPipelineLayout(), VK_SHADER_STAGE_VERTEX_BIT, 0, sizeof(PushConstantData), &push);
 
@@ -110,7 +111,7 @@ namespace PixelEngine {
             auto& sprite = spriteView.get<SpriteRendererComponent>(entity);
 
             Renderer2D::SubmitQuad(
-                transform.GetTransform(),
+                scene.GetWorldTransform({entity, &scene}),
                 sprite.Mat.TextureID,
                 sprite.Mat.Color,
                 sprite.Mat.Blend,

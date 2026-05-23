@@ -6,6 +6,8 @@ add_library(engine-ecs STATIC
     Components.hpp
     RenderSystem.hpp
     RenderSystem.cpp
+    SceneSerializer.hpp
+    SceneSerializer.cpp
 )
 target_include_directories(engine-ecs PUBLIC 
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -16,4 +18,5 @@ target_link_libraries(engine-ecs
         engine-core
         EnTT::EnTT
         engine-assets
+        nlohmann_json::nlohmann_json
 )
