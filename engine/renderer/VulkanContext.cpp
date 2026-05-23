@@ -49,6 +49,7 @@ namespace PixelEngine {
         CreateUniformBuffers();
         CreateTextureSampler();
         CreateDescriptorSets();
+        CreateQueryPool();
 
         PX_CORE_INFO("Vulkan Context Initialized.");
     }
@@ -58,6 +59,11 @@ namespace PixelEngine {
             vkDeviceWaitIdle(m_Device);
             
             CleanupSwapchain();
+
+            if (m_QueryPool != VK_NULL_HANDLE) {
+                vkDestroyQueryPool(m_Device, m_QueryPool, nullptr);
+                m_QueryPool = VK_NULL_HANDLE;
+            }
 
             if (m_DescriptorPool != VK_NULL_HANDLE) {
                 vkDestroyDescriptorPool(m_Device, m_DescriptorPool, nullptr);
@@ -494,6 +500,56 @@ namespace PixelEngine {
             if (vkCreateFramebuffer(m_Device, &framebufferInfo, nullptr, &m_SwapchainFramebuffers[i]) != VK_SUCCESS) {
                 PX_CORE_CRITICAL("Failed to create framebuffer!");
             }
+        }
+    }
+
+    void VulkanContext::CreateQueryPool() {
+        VkPhysicalDeviceProperties properties;
+        vkGetPhysicalDeviceProperties(m_PhysicalDevice, &properties);
+        m_TimestampPeriod = properties.limits.timestampPeriod;
+
+        if (!properties.limits.timestampComputeAndGraphics) {
+            PX_CORE_WARN("Device does not support timestamp queries for graphics queue.");
+            return;
+        }
+
+        VkQueryPoolCreateInfo queryPoolInfo{};
+        queryPoolInfo.sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO;
+        queryPoolInfo.queryType = VK_QUERY_TYPE_TIMESTAMP;
+        queryPoolInfo.queryCount = static_cast<uint32_t>(m_SwapchainImages.size()) * 2;
+
+        if (vkCreateQueryPool(m_Device, &queryPoolInfo, nullptr, &m_QueryPool) != VK_SUCCESS) {
+            PX_CORE_ERROR("Failed to create query pool!");
+        }
+    }
+
+    void VulkanContext::ResetQueryPool(VkCommandBuffer commandBuffer, uint32_t imageIndex) {
+        if (m_QueryPool == VK_NULL_HANDLE) return;
+        vkCmdResetQueryPool(commandBuffer, m_QueryPool, imageIndex * 2, 2);
+    }
+
+    void VulkanContext::WriteTimestamp(VkCommandBuffer commandBuffer, VkPipelineStageFlagBits pipelineStage, uint32_t imageIndex, uint32_t queryIndex) {
+        if (m_QueryPool == VK_NULL_HANDLE) return;
+        vkCmdWriteTimestamp(commandBuffer, pipelineStage, m_QueryPool, imageIndex * 2 + queryIndex);
+    }
+
+    void VulkanContext::FetchQueryResults(uint32_t imageIndex) {
+        if (m_QueryPool == VK_NULL_HANDLE) return;
+
+        uint64_t buffer[2];
+        VkResult result = vkGetQueryPoolResults(
+            m_Device,
+            m_QueryPool,
+            imageIndex * 2,
+            2,
+            sizeof(buffer),
+            buffer,
+            sizeof(uint64_t),
+            VK_QUERY_RESULT_64_BIT
+        );
+
+        if (result == VK_SUCCESS) {
+            m_GPUTime = (buffer[1] - buffer[0]) * m_TimestampPeriod / 1000000.0f;
         }
     }
 
