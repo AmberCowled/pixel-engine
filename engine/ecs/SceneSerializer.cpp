@@ -186,6 +186,28 @@ namespace PixelEngine {
                 entityJson["AudioSourceComponent"] = audioJson;
             }
 
+            // 12. Prefab Component
+            if (entity.HasComponent<PrefabComponent>()) {
+                auto& pc = entity.GetComponent<PrefabComponent>();
+                json prefabJson;
+                prefabJson["PrefabID"] = static_cast<uint64_t>(pc.PrefabID);
+                prefabJson["OriginalUUID"] = static_cast<uint64_t>(pc.OriginalUUID);
+                json overridesJson = json::array();
+                for (const auto& field : pc.OverriddenFields) {
+                    overridesJson.push_back(field);
+                }
+                prefabJson["OverriddenFields"] = overridesJson;
+                entityJson["PrefabComponent"] = prefabJson;
+            }
+
+            // 13. Script Component
+            if (entity.HasComponent<ScriptComponent>()) {
+                auto& sc = entity.GetComponent<ScriptComponent>();
+                json scriptJson;
+                scriptJson["ClassName"] = sc.ClassName;
+                entityJson["ScriptComponent"] = scriptJson;
+            }
+
             entitiesJson.push_back(entityJson);
         }
 
@@ -350,6 +372,26 @@ namespace PixelEngine {
                 asc.IsMusic = audioJson.value("IsMusic", false);
                 asc.Stream = nullptr;
                 asc.IsPlaying = false;
+            }
+
+            // 10. Prefab Component
+            if (entityJson.find("PrefabComponent") != entityJson.end()) {
+                auto& pc = entity.AddComponent<PrefabComponent>();
+                auto& pcJson = entityJson["PrefabComponent"];
+                pc.PrefabID = UUID(pcJson.value("PrefabID", 0ull));
+                pc.OriginalUUID = UUID(pcJson.value("OriginalUUID", 0ull));
+                if (pcJson.contains("OverriddenFields") && pcJson["OverriddenFields"].is_array()) {
+                    for (auto& fieldVal : pcJson["OverriddenFields"]) {
+                        pc.OverriddenFields.push_back(fieldVal.get<std::string>());
+                    }
+                }
+            }
+
+            // 11. Script Component
+            if (entityJson.find("ScriptComponent") != entityJson.end()) {
+                auto& sc = entity.AddComponent<ScriptComponent>();
+                auto& scJson = entityJson["ScriptComponent"];
+                sc.ClassName = scJson.value("ClassName", "");
             }
         }
         return true;

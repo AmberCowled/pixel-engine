@@ -9,11 +9,20 @@ using json = nlohmann::json;
 
 namespace PixelEngine {
 
-    void AssetManager::Init(VulkanContext& context) {
+    void AssetManager::Init(VulkanContext& context, const std::string& directoryPath) {
         s_Context = &context;
         
+        // Clear previous runtime databases for dynamic project swapping
+        s_Textures.clear();
+        s_Tilesets.clear();
+        s_SpriteSheets.clear();
+        s_AudioClips.clear();
+        s_MetadataRegistry.clear();
+        s_PathToUUID.clear();
+        
+        s_AssetsRoot = std::filesystem::absolute(directoryPath).string();
         LoadRegistry();
-        ScanAssets("assets");
+        ScanAssets(directoryPath);
         SaveRegistry();
     }
 
@@ -172,13 +181,15 @@ namespace PixelEngine {
     }
 
     void AssetManager::LoadRegistry() {
-        // Find assets root first
-        std::vector<std::string> searchPaths = { "assets", "../assets", "../../assets" };
-        std::string root = "";
-        for (const auto& path : searchPaths) {
-            if (std::filesystem::exists(path) && std::filesystem::is_directory(path)) {
-                root = std::filesystem::absolute(path).string();
-                break;
+        std::string root = s_AssetsRoot;
+        if (root.empty()) {
+            // Find assets root first
+            std::vector<std::string> searchPaths = { "assets", "../assets", "../../assets" };
+            for (const auto& path : searchPaths) {
+                if (std::filesystem::exists(path) && std::filesystem::is_directory(path)) {
+                    root = std::filesystem::absolute(path).string();
+                    break;
+                }
             }
         }
 

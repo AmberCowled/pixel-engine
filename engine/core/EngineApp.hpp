@@ -33,6 +33,7 @@ namespace PixelEngine {
         virtual void OnUpdate(float deltaTime) {}
         virtual void OnRender() {}
         virtual void OnEvent(SDL_Event& event) {}
+        virtual bool OnCloseRequested() { return true; }
 
         // Manual render pass control for multi-pass setups
         void BeginSwapChainRenderPass(VkCommandBuffer commandBuffer, uint32_t imageIndex, glm::vec4 clearColor = {0.1f, 0.1f, 0.1f, 1.0f});

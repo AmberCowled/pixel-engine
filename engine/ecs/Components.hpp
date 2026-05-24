@@ -157,4 +157,23 @@ namespace PixelEngine {
         AudioSourceComponent(const AudioSourceComponent&) = default;
     };
 
+    struct PrefabComponent {
+        UUID PrefabID = 0;
+        UUID OriginalUUID = 0;
+        std::vector<std::string> OverriddenFields;
+
+        PrefabComponent() = default;
+        PrefabComponent(const PrefabComponent&) = default;
+        PrefabComponent(UUID prefabID) : PrefabID(prefabID) {}
+        PrefabComponent(UUID prefabID, UUID originalUUID) : PrefabID(prefabID), OriginalUUID(originalUUID) {}
+    };
+
+    struct ScriptComponent {
+        std::string ClassName;
+
+        ScriptComponent() = default;
+        ScriptComponent(const ScriptComponent&) = default;
+        ScriptComponent(const std::string& className) : ClassName(className) {}
+    };
+
 }

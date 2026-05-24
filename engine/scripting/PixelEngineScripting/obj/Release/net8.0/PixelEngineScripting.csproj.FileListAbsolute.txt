@@ -1,0 +1,12 @@
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\bin\Release\net8.0\PixelEngineScripting.deps.json
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\bin\Release\net8.0\PixelEngineScripting.dll
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\bin\Release\net8.0\PixelEngineScripting.pdb
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\obj\Release\net8.0\PixelEngineScripting.GeneratedMSBuildEditorConfig.editorconfig
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\obj\Release\net8.0\PixelEngineScripting.AssemblyInfoInputs.cache
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\obj\Release\net8.0\PixelEngineScripting.AssemblyInfo.cs
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\obj\Release\net8.0\PixelEngineScripting.csproj.CoreCompileInputs.cache
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\obj\Release\net8.0\PixelEngineScripting.sourcelink.json
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\obj\Release\net8.0\PixelEngineScripting.dll
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\obj\Release\net8.0\refint\PixelEngineScripting.dll
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\obj\Release\net8.0\PixelEngineScripting.pdb
+C:\Users\Zack\OneDrive\Documents\Github\pixel-engine\engine\scripting\PixelEngineScripting\obj\Release\net8.0\ref\PixelEngineScripting.dll

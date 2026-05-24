@@ -16,7 +16,7 @@ namespace PixelEngine {
 
     class AssetManager {
     public:
-        static void Init(VulkanContext& context);
+        static void Init(VulkanContext& context, const std::string& directoryPath = "assets");
         static void Shutdown();
 
         // Registry management
