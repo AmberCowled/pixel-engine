@@ -3,10 +3,79 @@
 #include <engine/renderer/VulkanContext.hpp>
 #include <imgui.h>
 #include <array>
+#include <filesystem>
 #include <imgui_impl_sdl3.h>
 #include <imgui_impl_vulkan.h>
 
 namespace PixelEngine {
+
+    static void ApplySlateDarkTheme(float scale) {
+        ImGuiStyle& style = ImGui::GetStyle();
+        style = ImGuiStyle(); // Reset to default style first
+        
+        ImGui::StyleColorsDark();
+
+        auto& colors = style.Colors;
+        colors[ImGuiCol_WindowBg] = ImVec4{ 0.09f, 0.09f, 0.12f, 1.0f }; // deep slate #17171e
+        colors[ImGuiCol_ChildBg] = ImVec4{ 0.09f, 0.09f, 0.12f, 1.0f };
+
+        // Headers
+        colors[ImGuiCol_Header] = ImVec4{ 0.18f, 0.18f, 0.24f, 1.0f };
+        colors[ImGuiCol_HeaderHovered] = ImVec4{ 0.24f, 0.24f, 0.32f, 1.0f };
+        colors[ImGuiCol_HeaderActive] = ImVec4{ 0.30f, 0.30f, 0.40f, 1.0f };
+        
+        // Buttons
+        colors[ImGuiCol_Button] = ImVec4{ 0.18f, 0.18f, 0.24f, 1.0f };
+        colors[ImGuiCol_ButtonHovered] = ImVec4{ 0.28f, 0.28f, 0.38f, 1.0f };
+        colors[ImGuiCol_ButtonActive] = ImVec4{ 0.38f, 0.38f, 0.48f, 1.0f };
+
+        // Frame BG
+        colors[ImGuiCol_FrameBg] = ImVec4{ 0.12f, 0.12f, 0.16f, 1.0f };
+        colors[ImGuiCol_FrameBgHovered] = ImVec4{ 0.18f, 0.18f, 0.24f, 1.0f };
+        colors[ImGuiCol_FrameBgActive] = ImVec4{ 0.24f, 0.24f, 0.32f, 1.0f };
+
+        // Tabs
+        colors[ImGuiCol_Tab] = ImVec4{ 0.12f, 0.12f, 0.16f, 1.0f };
+        colors[ImGuiCol_TabHovered] = ImVec4{ 0.24f, 0.24f, 0.32f, 1.0f };
+        colors[ImGuiCol_TabActive] = ImVec4{ 0.38f, 0.35f, 0.90f, 1.0f }; // active accent (indigo #6366F1)
+        colors[ImGuiCol_TabUnfocused] = ImVec4{ 0.12f, 0.12f, 0.16f, 1.0f };
+        colors[ImGuiCol_TabUnfocusedActive] = ImVec4{ 0.18f, 0.18f, 0.24f, 1.0f };
+
+        // Title BG
+        colors[ImGuiCol_TitleBg] = ImVec4{ 0.12f, 0.12f, 0.16f, 1.0f };
+        colors[ImGuiCol_TitleBgActive] = ImVec4{ 0.12f, 0.12f, 0.16f, 1.0f };
+        colors[ImGuiCol_TitleBgCollapsed] = ImVec4{ 0.12f, 0.12f, 0.16f, 1.0f };
+
+        // Scrollbar
+        colors[ImGuiCol_ScrollbarBg] = ImVec4{ 0.09f, 0.09f, 0.12f, 1.0f };
+        colors[ImGuiCol_ScrollbarGrab] = ImVec4{ 0.18f, 0.18f, 0.24f, 1.0f };
+        colors[ImGuiCol_ScrollbarGrabHovered] = ImVec4{ 0.24f, 0.24f, 0.32f, 1.0f };
+        colors[ImGuiCol_ScrollbarGrabActive] = ImVec4{ 0.30f, 0.30f, 0.40f, 1.0f };
+
+        // Checkbox
+        colors[ImGuiCol_CheckMark] = ImVec4{ 0.38f, 0.35f, 0.90f, 1.0f }; // Checkmark (indigo #6366F1)
+
+        // Slider Grab
+        colors[ImGuiCol_SliderGrab] = ImVec4{ 0.38f, 0.35f, 0.90f, 1.0f };
+        colors[ImGuiCol_SliderGrabActive] = ImVec4{ 0.48f, 0.45f, 0.95f, 1.0f };
+
+        // Separators
+        colors[ImGuiCol_Separator] = ImVec4{ 0.18f, 0.18f, 0.24f, 1.0f };
+        colors[ImGuiCol_SeparatorHovered] = ImVec4{ 0.24f, 0.24f, 0.32f, 1.0f };
+        colors[ImGuiCol_SeparatorActive] = ImVec4{ 0.38f, 0.35f, 0.90f, 1.0f };
+
+        // Rounding & Sizes
+        style.WindowRounding = 6.0f;
+        style.FrameRounding = 4.0f;
+        style.GrabRounding = 4.0f;
+        style.TabRounding = 4.0f;
+        style.WindowBorderSize = 1.0f;
+        style.FrameBorderSize = 1.0f;
+        style.PopupBorderSize = 1.0f;
+
+        style.ScaleAllSizes(scale);
+    }
+
 
     EngineApp::EngineApp(const AppConfig& config) 
         : m_Config(config) {
@@ -84,33 +153,42 @@ namespace PixelEngine {
     }
 
     void EngineApp::Run() {
+        PX_CORE_INFO("EngineApp::Run: Starting loop...");
         uint64_t lastTime = SDL_GetTicks();
 
         while (m_Running) {
+            PX_CORE_INFO("EngineApp::Run: Loop iteration start. m_Running={0}", m_Running);
             uint64_t currentTime = SDL_GetTicks();
             float deltaTime = (currentTime - lastTime) / 1000.0f;
             lastTime = currentTime;
 
+            PX_CORE_INFO("EngineApp::Run: Processing events...");
             ProcessEvents();
 
             if (m_Running) {
                 int width = 0, height = 0;
                 SDL_GetWindowSizeInPixels(m_Window, &width, &height);
+                PX_CORE_INFO("EngineApp::Run: Window size: {0}x{1}", width, height);
                 if (width == 0 || height == 0) {
                     SDL_Delay(10);
                     lastTime = SDL_GetTicks();
                     continue;
                 }
 
+                PX_CORE_INFO("EngineApp::Run: Calling BeginFrame...");
                 BeginFrame();
                 
+                PX_CORE_INFO("EngineApp::Run: Calling OnUpdate...");
                 OnUpdate(deltaTime);
+                
+                PX_CORE_INFO("EngineApp::Run: Calling OnRender...");
                 OnRender();
 
+                PX_CORE_INFO("EngineApp::Run: Calling EndFrame...");
                 EndFrame();
             }
         }
-
+        PX_CORE_INFO("EngineApp::Run: Loop finished.");
         vkDeviceWaitIdle(m_VulkanContext->GetDevice());
     }
 
@@ -128,11 +206,15 @@ namespace PixelEngine {
             ImGui_ImplSDL3_ProcessEvent(&event);
 
             if (event.type == SDL_EVENT_QUIT) {
-                m_Running = false;
+                if (OnCloseRequested()) {
+                    m_Running = false;
+                }
             }
 
             if (event.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED && event.window.windowID == SDL_GetWindowID(m_Window)) {
-                m_Running = false;
+                if (OnCloseRequested()) {
+                    m_Running = false;
+                }
             }
 
             if (event.type == SDL_EVENT_WINDOW_PIXEL_SIZE_CHANGED && event.window.windowID == SDL_GetWindowID(m_Window)) {
@@ -142,10 +224,7 @@ namespace PixelEngine {
             if (event.type == SDL_EVENT_WINDOW_DISPLAY_SCALE_CHANGED && event.window.windowID == SDL_GetWindowID(m_Window)) {
                 float scale = SDL_GetWindowDisplayScale(m_Window);
                 ImGui::GetIO().FontGlobalScale = scale;
-                ImGuiStyle& style = ImGui::GetStyle();
-                style = ImGuiStyle();
-                ImGui::StyleColorsDark();
-                style.ScaleAllSizes(scale);
+                ApplySlateDarkTheme(scale);
                 m_FramebufferResized = true;
             }
 
@@ -182,11 +261,47 @@ namespace PixelEngine {
         io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
         io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;
 
-        ImGui::StyleColorsDark();
-
         float scale = SDL_GetWindowDisplayScale(m_Window);
         io.FontGlobalScale = scale;
-        ImGui::GetStyle().ScaleAllSizes(scale);
+
+        // Load modern Segoe UI (Windows standard UI font)
+        ImFont* mainFont = nullptr;
+        std::string fontPath = "C:\\Windows\\Fonts\\segoeui.ttf";
+        if (std::filesystem::exists(fontPath)) {
+            mainFont = io.Fonts->AddFontFromFileTTF(fontPath.c_str(), 16.0f);
+        }
+        if (!mainFont) {
+            mainFont = io.Fonts->AddFontDefault();
+        }
+
+        // Load FontAwesome icons and merge them with the main font
+        std::vector<std::string> faSearchPaths = {
+            "assets/fonts/fa-solid-900.ttf",
+            "../assets/fonts/fa-solid-900.ttf",
+            "../../assets/fonts/fa-solid-900.ttf",
+            "../../../assets/fonts/fa-solid-900.ttf",
+            "build/bin/assets/fonts/fa-solid-900.ttf",
+            "../bin/assets/fonts/fa-solid-900.ttf"
+        };
+        std::string faPath = "";
+        for (const auto& p : faSearchPaths) {
+            if (std::filesystem::exists(p)) {
+                faPath = p;
+                break;
+            }
+        }
+
+        if (!faPath.empty()) {
+            ImFontConfig config;
+            config.MergeMode = true;
+            config.PixelSnapH = true;
+            static const ImWchar icon_ranges[] = { 0xf000, 0xf8ff, 0 }; // FontAwesome ranges (from start of solid icons)
+            io.Fonts->AddFontFromFileTTF(faPath.c_str(), 14.0f, &config, icon_ranges);
+        } else {
+            PX_CORE_WARN("Failed to find FontAwesome font (fa-solid-900.ttf)!");
+        }
+
+        ApplySlateDarkTheme(scale);
 
         ImGui_ImplSDL3_InitForVulkan(m_Window);
         
