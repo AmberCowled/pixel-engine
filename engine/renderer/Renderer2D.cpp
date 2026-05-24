@@ -177,18 +177,11 @@ namespace PixelEngine {
                 { -0.5f,  0.5f, 0.0f, 1.0f }
             };
 
-            glm::vec2 uvs[4] = {
-                { 0.0f, 0.0f },
-                { 1.0f, 0.0f },
-                { 1.0f, 1.0f },
-                { 0.0f, 1.0f }
-            };
-
             // Write vertices
             for (int i = 0; i < 4; i++) {
                 s_VertexBufferPtr->pos = glm::vec3(quad.Transform * qPos[i]);
                 s_VertexBufferPtr->color = quad.Color;
-                s_VertexBufferPtr->uv = uvs[i];
+                s_VertexBufferPtr->uv = quad.UVs[i];
                 s_VertexBufferPtr++;
             }
 
@@ -284,7 +277,17 @@ namespace PixelEngine {
     }
 
     void Renderer2D::SubmitQuad(const glm::mat4& transform, UUID textureID, const glm::vec4& color, BlendMode blend, int renderLayer) {
-        s_DrawQueue.push_back({ transform, color, textureID, blend, renderLayer });
+        std::array<glm::vec2, 4> defaultUVs = {
+            glm::vec2{ 0.0f, 0.0f },
+            glm::vec2{ 1.0f, 0.0f },
+            glm::vec2{ 1.0f, 1.0f },
+            glm::vec2{ 0.0f, 1.0f }
+        };
+        s_DrawQueue.push_back({ transform, color, textureID, blend, renderLayer, defaultUVs });
+    }
+
+    void Renderer2D::SubmitQuad(const glm::mat4& transform, UUID textureID, const glm::vec4& color, BlendMode blend, int renderLayer, const std::array<glm::vec2, 4>& uvs) {
+        s_DrawQueue.push_back({ transform, color, textureID, blend, renderLayer, uvs });
     }
 
     void Renderer2D::SubmitQuad(const glm::vec2& position, const glm::vec2& size, float rotation, UUID textureID, const glm::vec4& color, BlendMode blend, int renderLayer) {
@@ -294,6 +297,15 @@ namespace PixelEngine {
         }
         transform = glm::scale(transform, glm::vec3(size, 1.0f));
         SubmitQuad(transform, textureID, color, blend, renderLayer);
+    }
+
+    void Renderer2D::SubmitQuad(const glm::vec2& position, const glm::vec2& size, float rotation, UUID textureID, const glm::vec4& color, BlendMode blend, int renderLayer, const std::array<glm::vec2, 4>& uvs) {
+        glm::mat4 transform = glm::translate(glm::mat4(1.0f), glm::vec3(position, 0.0f));
+        if (rotation != 0.0f) {
+            transform = glm::rotate(transform, glm::radians(rotation), glm::vec3(0.0f, 0.0f, 1.0f));
+        }
+        transform = glm::scale(transform, glm::vec3(size, 1.0f));
+        SubmitQuad(transform, textureID, color, blend, renderLayer, uvs);
     }
 
     void Renderer2D::ResetStats() {

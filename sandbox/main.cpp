@@ -15,6 +15,8 @@
 #include <engine/renderer/ShaderHotReloader.hpp>
 #include <engine/assets/AssetManager.hpp>
 #include <engine/assets/AssetWatcher.hpp>
+#include <engine/assets/AudioClip.hpp>
+#include <engine/audio/AudioManager.hpp>
 #include <engine/ecs/Scene.hpp>
 #include <engine/ecs/Entity.hpp>
 #include <engine/ecs/Components.hpp>
@@ -47,6 +49,7 @@ public:
         PixelEngine::Renderer2D::Init(context);
         PixelEngine::ShaderHotReloader::Init("shaders");
         PixelEngine::AssetWatcher::Init("assets");
+        PixelEngine::AudioManager::Init();
 
         // 3. Create Offscreen Target (default size 1280x720 scaled by DPI)
         float dpiScale = SDL_GetWindowDisplayScale(m_Window);
@@ -149,6 +152,7 @@ public:
 
         PixelEngine::Renderer2D::Shutdown();
         PixelEngine::AssetManager::Shutdown();
+        PixelEngine::AudioManager::Shutdown();
         PX_INFO("Sandbox App Shutdown.");
     }
 
@@ -162,6 +166,45 @@ public:
         // Update ECS Systems (Velocity, Animations, etc.) if Playing
         if (m_SceneState == SceneState::Play) {
             m_ActiveScene->OnUpdate(deltaTime);
+        } else if (m_SceneState == SceneState::Edit) {
+            if (m_SelectedEntity && m_SelectedEntity.HasComponent<PixelEngine::AnimatorComponent>() && m_SelectedEntity.HasComponent<PixelEngine::SpriteRendererComponent>()) {
+                auto& ac = m_SelectedEntity.GetComponent<PixelEngine::AnimatorComponent>();
+                auto& sprite = m_SelectedEntity.GetComponent<PixelEngine::SpriteRendererComponent>();
+                if (ac.Playing && !ac.CurrentClip.empty()) {
+                    PixelEngine::AnimationClip* clip = nullptr;
+                    for (auto& c : ac.Clips) {
+                        if (c.Name == ac.CurrentClip) {
+                            clip = &c;
+                            break;
+                        }
+                    }
+                    if (clip && !clip->Frames.empty()) {
+                        float frameTime = 1.0f / clip->FPS;
+                        ac.Timer += deltaTime;
+                        if (ac.Timer >= frameTime) {
+                            ac.Timer -= frameTime;
+                            ac.CurrentFrame++;
+                            if (ac.CurrentFrame >= static_cast<int>(clip->Frames.size())) {
+                                if (clip->Loop) {
+                                    ac.CurrentFrame = 0;
+                                } else {
+                                    ac.CurrentFrame = static_cast<int>(clip->Frames.size()) - 1;
+                                    ac.Playing = false;
+                                }
+                            }
+                        }
+                        
+                        auto spritesheet = PixelEngine::AssetManager::GetSpriteSheet(ac.SpriteSheetID);
+                        if (spritesheet) {
+                            sprite.Mat.TextureID = spritesheet->TextureID;
+                            auto fit = spritesheet->Frames.find(clip->Frames[ac.CurrentFrame].FrameName);
+                            if (fit != spritesheet->Frames.end()) {
+                                sprite.Mat.UVs = fit->second.UVs;
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         m_Rotation += deltaTime * m_RotationSpeed;
@@ -233,10 +276,13 @@ public:
 
                 ImGui::DockBuilderDockWindow("Toolbar", dock_id_top);
                 ImGui::DockBuilderDockWindow("Hierarchy", dock_id_left);
+                ImGui::DockBuilderDockWindow("Tilemap Painting", dock_id_left);
                 ImGui::DockBuilderDockWindow("Inspector", dock_id_right);
                 ImGui::DockBuilderDockWindow("Profiler", dock_id_right);
                 ImGui::DockBuilderDockWindow("Asset Browser", dock_id_bottom);
                 ImGui::DockBuilderDockWindow("Console", dock_id_bottom);
+                ImGui::DockBuilderDockWindow("Animation Editor", dock_id_bottom);
+                ImGui::DockBuilderDockWindow("Audio Mixer", dock_id_bottom);
                 ImGui::DockBuilderDockWindow("Viewport", dock_main_id);
 
                 ImGui::DockBuilderFinish(dockspace_id);
@@ -300,6 +346,7 @@ public:
             bool isPlay = (m_SceneState == SceneState::Play);
             if (ImGui::RadioButton("Play", isPlay)) {
                 if (m_SceneState == SceneState::Edit) {
+                    m_ActiveScene->StopAllAudio();
                     m_SceneState = SceneState::Play;
                     m_EditorScene = m_ActiveScene; // save original active scene
                     m_ActiveScene = PixelEngine::Scene::Clone(m_EditorScene);
@@ -322,6 +369,7 @@ public:
             // Stop Button
             if (ImGui::Button("Stop")) {
                 if (m_SceneState == SceneState::Play || m_SceneState == SceneState::Pause) {
+                    m_ActiveScene->StopAllAudio();
                     m_SceneState = SceneState::Edit;
                     m_ActiveScene = m_EditorScene; // restore edit scene
                     m_SelectedEntity = {};
@@ -516,6 +564,132 @@ public:
                 }
             }
 
+            if (m_SelectedEntity.HasComponent<PixelEngine::TilemapComponent>()) {
+                if (ImGui::CollapsingHeader("Tilemap Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    auto& tc = m_SelectedEntity.GetComponent<PixelEngine::TilemapComponent>();
+                    ImGui::Text("Tileset UUID: %llu", (uint64_t)tc.TilesetID);
+                    if (tc.TilesetID != 0) {
+                        ImGui::Text("Path: %s", PixelEngine::AssetManager::GetAssetPath(tc.TilesetID).c_str());
+                    } else {
+                        ImGui::Text("Path: None");
+                    }
+                    
+                    ImGui::Button("Drag tileset here to assign", ImVec2(-1, 30));
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+                            const char* assetPath = (const char*)payload->Data;
+                            PixelEngine::UUID uuid = PixelEngine::AssetManager::LoadTileset(assetPath);
+                            if (uuid != 0) {
+                                tc.TilesetID = uuid;
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+
+                    int renderLayer = tc.RenderLayer;
+                    if (ImGui::DragInt("Render Layer", &renderLayer, 1.0f)) {
+                        tc.RenderLayer = renderLayer;
+                    }
+
+                    int tileSize = (int)tc.TileSize;
+                    if (ImGui::DragInt("Tile Size", &tileSize, 1.0f, 1, 128)) {
+                        tc.TileSize = static_cast<uint32_t>(tileSize);
+                    }
+
+                    if (ImGui::Button("Remove Tilemap")) {
+                        m_SelectedEntity.RemoveComponent<PixelEngine::TilemapComponent>();
+                    }
+                }
+            }
+
+            if (m_SelectedEntity.HasComponent<PixelEngine::AnimatorComponent>()) {
+                if (ImGui::CollapsingHeader("Animator Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    auto& ac = m_SelectedEntity.GetComponent<PixelEngine::AnimatorComponent>();
+                    ImGui::Text("Spritesheet UUID: %llu", (uint64_t)ac.SpriteSheetID);
+                    if (ac.SpriteSheetID != 0) {
+                        ImGui::Text("Path: %s", PixelEngine::AssetManager::GetAssetPath(ac.SpriteSheetID).c_str());
+                    } else {
+                        ImGui::Text("Path: None");
+                    }
+                    
+                    ImGui::Button("Drag spritesheet here to assign", ImVec2(-1, 30));
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+                            const char* assetPath = (const char*)payload->Data;
+                            PixelEngine::UUID uuid = PixelEngine::AssetManager::LoadSpriteSheet(assetPath);
+                            if (uuid != 0) {
+                                ac.SpriteSheetID = uuid;
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+
+                    ImGui::Checkbox("Playing", &ac.Playing);
+                    ImGui::Text("Current Clip: %s", ac.CurrentClip.c_str());
+                    ImGui::Text("Current Frame: %d", ac.CurrentFrame);
+
+                    if (ImGui::Button("Remove Animator")) {
+                        m_SelectedEntity.RemoveComponent<PixelEngine::AnimatorComponent>();
+                    }
+                }
+            }
+
+            if (m_SelectedEntity.HasComponent<PixelEngine::AudioSourceComponent>()) {
+                if (ImGui::CollapsingHeader("Audio Source Component", ImGuiTreeNodeFlags_DefaultOpen)) {
+                    auto& asc = m_SelectedEntity.GetComponent<PixelEngine::AudioSourceComponent>();
+                    ImGui::Text("Audio Clip UUID: %llu", (uint64_t)asc.ClipID);
+                    if (asc.ClipID != 0) {
+                        ImGui::Text("Path: %s", PixelEngine::AssetManager::GetAssetPath(asc.ClipID).c_str());
+                    } else {
+                        ImGui::Text("Path: None");
+                    }
+                    
+                    ImGui::Button("Drag .wav here to assign", ImVec2(-1, 30));
+                    if (ImGui::BeginDragDropTarget()) {
+                        if (const ImGuiPayload* payload = ImGui::AcceptDragDropPayload("ASSET_PATH")) {
+                            const char* assetPath = (const char*)payload->Data;
+                            PixelEngine::UUID uuid = PixelEngine::AssetManager::LoadAudioClip(assetPath);
+                            if (uuid != 0) {
+                                asc.ClipID = uuid;
+                            }
+                        }
+                        ImGui::EndDragDropTarget();
+                    }
+
+                    // Properties
+                    ImGui::Checkbox("Looping", &asc.Loop);
+                    ImGui::Checkbox("Play On Start", &asc.PlayOnStart);
+                    ImGui::Checkbox("Is Music Bus", &asc.IsMusic);
+
+                    float volume = asc.Volume;
+                    if (ImGui::SliderFloat("Volume", &volume, 0.0f, 1.0f)) {
+                        asc.Volume = volume;
+                    }
+
+                    ImGui::Separator();
+                    ImGui::Text("Editor Preview Controls:");
+                    if (ImGui::Button("Play Preview")) {
+                        asc.IsPlaying = true;
+                    }
+                    ImGui::SameLine();
+                    if (ImGui::Button("Stop Preview")) {
+                        asc.IsPlaying = false;
+                        if (asc.Stream) {
+                            SDL_DestroyAudioStream(asc.Stream);
+                            asc.Stream = nullptr;
+                        }
+                    }
+
+                    if (ImGui::Button("Remove Audio Source")) {
+                        if (asc.Stream) {
+                            SDL_DestroyAudioStream(asc.Stream);
+                            asc.Stream = nullptr;
+                        }
+                        m_SelectedEntity.RemoveComponent<PixelEngine::AudioSourceComponent>();
+                    }
+                }
+            }
+
             ImGui::Separator();
             if (ImGui::Button("Add Component", ImVec2(-1, 30))) {
                 ImGui::OpenPopup("AddComponentPopup");
@@ -546,6 +720,18 @@ public:
                     m_SelectedEntity.AddComponent<PixelEngine::SpriteAnimationComponent>();
                     ImGui::CloseCurrentPopup();
                 }
+                if (!m_SelectedEntity.HasComponent<PixelEngine::TilemapComponent>() && ImGui::MenuItem("Tilemap Component")) {
+                    m_SelectedEntity.AddComponent<PixelEngine::TilemapComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+                if (!m_SelectedEntity.HasComponent<PixelEngine::AnimatorComponent>() && ImGui::MenuItem("Animator Component")) {
+                    m_SelectedEntity.AddComponent<PixelEngine::AnimatorComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
+                if (!m_SelectedEntity.HasComponent<PixelEngine::AudioSourceComponent>() && ImGui::MenuItem("Audio Source Component")) {
+                    m_SelectedEntity.AddComponent<PixelEngine::AudioSourceComponent>();
+                    ImGui::CloseCurrentPopup();
+                }
                 ImGui::EndPopup();
             }
 
@@ -566,6 +752,18 @@ public:
         auto stats = PixelEngine::Renderer2D::GetStats();
         ImGui::Text("Batch Draw Calls: %u", stats.DrawCalls);
         ImGui::Text("Batch Quad Count: %u", stats.QuadCount);
+
+        ImGui::Separator();
+        ImGui::Text("ECS Runtime:");
+        ImGui::Text("Active Entities: %zu", m_ActiveScene->Reg().storage<entt::entity>().size());
+
+        ImGui::Separator();
+        ImGui::Text("Resource Lifetime Stats:");
+        ImGui::Text("Loaded Textures: %zu", PixelEngine::AssetManager::GetLoadedTexturesCount());
+        ImGui::Text("Loaded Tilesets: %zu", PixelEngine::AssetManager::GetLoadedTilesetsCount());
+        ImGui::Text("Loaded SpriteSheets: %zu", PixelEngine::AssetManager::GetLoadedSpriteSheetsCount());
+        ImGui::Text("Loaded AudioClips: %zu", PixelEngine::AssetManager::GetLoadedAudioClipsCount());
+        
         ImGui::Separator();
         
         ImGui::Checkbox("Pixel Snapping", &m_PixelSnapping);
@@ -656,6 +854,64 @@ public:
                 ImGui::Image((ImTextureID)m_ViewportDescriptorSet, ImVec2{ m_ViewportSize.x, m_ViewportSize.y });
             }
 
+            ImVec2 imageMin = ImGui::GetItemRectMin();
+            ImVec2 imageSize = ImGui::GetItemRectSize();
+
+            if (m_SelectedEntity && m_SelectedEntity.HasComponent<PixelEngine::TilemapComponent>() && m_SceneState == SceneState::Edit) {
+                if (m_ViewportHovered && !ImGuizmo::IsOver() && !ImGuizmo::IsUsing()) {
+                    if (ImGui::IsMouseDown(ImGuiMouseButton_Left)) {
+                        ImVec2 mousePos = ImGui::GetMousePos();
+                        float mx = mousePos.x - imageMin.x;
+                        float my = mousePos.y - imageMin.y;
+                        
+                        if (mx >= 0.0f && mx < imageSize.x && my >= 0.0f && my < imageSize.y) {
+                            float ndcX = (mx / imageSize.x) * 2.0f - 1.0f;
+                            float ndcY = 1.0f - (my / imageSize.y) * 2.0f;
+                            
+                            glm::mat4 projection = m_Camera.GetProjection();
+                            glm::mat4 view = m_Camera.GetView();
+                            glm::mat4 invVP = glm::inverse(projection * view);
+                            
+                            glm::vec4 nearPt = invVP * glm::vec4(ndcX, ndcY, 0.0f, 1.0f);
+                            glm::vec4 farPt = invVP * glm::vec4(ndcX, ndcY, 1.0f, 1.0f);
+                            
+                            nearPt /= nearPt.w;
+                            farPt /= farPt.w;
+                            
+                            glm::vec3 rayOrigin = glm::vec3(nearPt);
+                            glm::vec3 rayDir = glm::normalize(glm::vec3(farPt - nearPt));
+                            
+                            if (glm::abs(rayDir.z) > 0.0001f) {
+                                float t = -rayOrigin.z / rayDir.z;
+                                if (t >= 0.0f) {
+                                    glm::vec3 intersection = rayOrigin + t * rayDir;
+                                    
+                                    glm::mat4 invWorldTransform = glm::inverse(m_ActiveScene->GetWorldTransform(m_SelectedEntity));
+                                    glm::vec4 localIntersection = invWorldTransform * glm::vec4(intersection, 1.0f);
+                                    
+                                    int tileX = static_cast<int>(std::floor(localIntersection.x));
+                                    int tileY = static_cast<int>(std::floor(localIntersection.y));
+                                    
+                                    int chunkX = tileX >= 0 ? tileX / 16 : (tileX - 15) / 16;
+                                    int chunkY = tileY >= 0 ? tileY / 16 : (tileY - 15) / 16;
+                                    int localX = tileX - chunkX * 16;
+                                    int localY = tileY - chunkY * 16;
+                                    
+                                    auto& tc = m_SelectedEntity.GetComponent<PixelEngine::TilemapComponent>();
+                                    auto chunkCoords = std::make_pair(chunkX, chunkY);
+                                    
+                                    if (m_BrushType == BrushType::Paint) {
+                                        tc.Chunks[chunkCoords].Tiles[localY * 16 + localX].TileIndex = m_SelectedTileIndex;
+                                    } else if (m_BrushType == BrushType::Erase) {
+                                        tc.Chunks[chunkCoords].Tiles[localY * 16 + localX].TileIndex = 0;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // Editor Orbit Camera Controls
             static float cameraPitch = 0.6f;
             static float cameraYaw = 0.8f;
@@ -730,6 +986,290 @@ public:
         }
         ImGui::End();
         ImGui::PopStyleVar();
+
+        // 7. Tilemap Painting Panel
+        ImGui::Begin("Tilemap Painting");
+        if (m_SelectedEntity && m_SelectedEntity.HasComponent<PixelEngine::TilemapComponent>()) {
+            auto& tc = m_SelectedEntity.GetComponent<PixelEngine::TilemapComponent>();
+            
+            // List tileset assets in project
+            ImGui::Text("Available Tilesets:");
+            for (const auto& [uuid, meta] : PixelEngine::AssetManager::GetMetadataRegistry()) {
+                if (meta.Type == PixelEngine::AssetType::Tileset) {
+                    bool isSelected = (tc.TilesetID == uuid);
+                    if (ImGui::Selectable(meta.SourcePath.c_str(), isSelected)) {
+                        tc.TilesetID = uuid;
+                    }
+                }
+            }
+
+            ImGui::Separator();
+            auto tileset = PixelEngine::AssetManager::GetTileset(tc.TilesetID);
+            
+            if (tileset) {
+                // Brush selection
+                const char* brushNames[] = { "Paint Brush", "Eraser" };
+                int currentBrush = static_cast<int>(m_BrushType);
+                if (ImGui::Combo("Brush Tool", &currentBrush, brushNames, 2)) {
+                    m_BrushType = static_cast<BrushType>(currentBrush);
+                }
+                
+                ImGui::Separator();
+                ImGui::Text("Palette Grid");
+                
+                auto texture = PixelEngine::AssetManager::GetTexture(tileset->TextureID);
+                if (texture) {
+                    VkDescriptorSet textureDS = PixelEngine::AssetManager::GetTextureDescriptorSet(tileset->TextureID);
+                    if (textureDS != VK_NULL_HANDLE) {
+                        float panelWidth = ImGui::GetContentRegionAvail().x;
+                        float scale = panelWidth / texture->GetWidth();
+                        ImVec2 displaySize(panelWidth, texture->GetHeight() * scale);
+                        
+                        ImVec2 startPos = ImGui::GetCursorScreenPos();
+                        ImGui::Image((ImTextureID)textureDS, displaySize);
+                        
+                        if (ImGui::IsItemHovered() && ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
+                            ImVec2 mousePos = ImGui::GetMousePos();
+                            float localX = mousePos.x - startPos.x;
+                            float localY = mousePos.y - startPos.y;
+                            
+                            float texX = localX / scale;
+                            float texY = localY / scale;
+                            
+                            uint32_t col = static_cast<uint32_t>(texX) / tileset->TileSize;
+                            uint32_t row = static_cast<uint32_t>(texY) / tileset->TileSize;
+                            uint32_t cols = texture->GetWidth() / tileset->TileSize;
+                            
+                            m_SelectedTileIndex = row * cols + col + 1; // 1-based index
+                        }
+                        
+                        // Draw highlight on selected tile
+                        if (m_SelectedTileIndex > 0) {
+                            uint32_t cols = texture->GetWidth() / tileset->TileSize;
+                            uint32_t col = (m_SelectedTileIndex - 1) % cols;
+                            uint32_t row = (m_SelectedTileIndex - 1) / cols;
+                            
+                            ImVec2 tileStart(startPos.x + col * tileset->TileSize * scale, startPos.y + row * tileset->TileSize * scale);
+                            ImVec2 tileEnd(tileStart.x + tileset->TileSize * scale, tileStart.y + tileset->TileSize * scale);
+                            
+                            ImGui::GetWindowDrawList()->AddRect(tileStart, tileEnd, IM_COL32(255, 255, 0, 255), 0.0f, 0, 2.0f);
+                        }
+                    }
+                } else {
+                    ImGui::TextColored(ImVec4(1, 0, 0, 1), "Tileset texture not loaded.");
+                }
+                
+                ImGui::Separator();
+                if (m_SelectedTileIndex > 0) {
+                    ImGui::Text("Selected Tile Index: %u", m_SelectedTileIndex);
+                    bool isSolid = tileset->SolidTiles[m_SelectedTileIndex];
+                    if (ImGui::Checkbox("Is Solid Tile (Collision)", &isSolid)) {
+                        tileset->SolidTiles[m_SelectedTileIndex] = isSolid;
+                        // Save changes to disk
+                        std::string tilesetPath = PixelEngine::AssetManager::GetAssetPath(tileset->ID);
+                        std::ofstream fout(tilesetPath);
+                        if (fout.is_open()) {
+                            nlohmann::json tsJson;
+                            tsJson["tileSize"] = tileset->TileSize;
+                            std::string texRelPath = "";
+                            auto texMetadata = PixelEngine::AssetManager::GetMetadataRegistry().find(tileset->TextureID);
+                            if (texMetadata != PixelEngine::AssetManager::GetMetadataRegistry().end()) {
+                                texRelPath = texMetadata->second.SourcePath;
+                            }
+                            tsJson["texturePath"] = texRelPath;
+                            nlohmann::json solidArray = nlohmann::json::array();
+                            for (const auto& [tileIdx, solid] : tileset->SolidTiles) {
+                                if (solid) {
+                                    solidArray.push_back(tileIdx);
+                                }
+                            }
+                            tsJson["solidTiles"] = solidArray;
+                            fout << std::setw(4) << tsJson << std::endl;
+                        }
+                    }
+                } else {
+                    ImGui::Text("No tile selected");
+                }
+            } else {
+                ImGui::Text("No tileset loaded on this component.");
+            }
+        } else {
+            ImGui::Text("Select an entity with a Tilemap Component to paint.");
+        }
+        ImGui::End();
+
+        // 8. Animation Editor Panel
+        ImGui::Begin("Animation Editor");
+        if (m_SelectedEntity && m_SelectedEntity.HasComponent<PixelEngine::AnimatorComponent>()) {
+            auto& ac = m_SelectedEntity.GetComponent<PixelEngine::AnimatorComponent>();
+            
+            // 1. Spritesheet selection
+            ImGui::Text("Select Sprite Sheet:");
+            for (const auto& [uuid, meta] : PixelEngine::AssetManager::GetMetadataRegistry()) {
+                if (meta.Type == PixelEngine::AssetType::SpriteSheet) {
+                    bool isSelected = (ac.SpriteSheetID == uuid);
+                    if (ImGui::Selectable(meta.SourcePath.c_str(), isSelected)) {
+                        ac.SpriteSheetID = uuid;
+                    }
+                }
+            }
+            
+            ImGui::Separator();
+            
+            auto spritesheet = PixelEngine::AssetManager::GetSpriteSheet(ac.SpriteSheetID);
+            if (spritesheet) {
+                // 2. Clip controls
+                ImGui::Text("Clips:");
+                static char newClipBuffer[64] = "";
+                ImGui::InputText("New Clip Name", newClipBuffer, sizeof(newClipBuffer));
+                ImGui::SameLine();
+                if (ImGui::Button("Add Clip") && strlen(newClipBuffer) > 0) {
+                    PixelEngine::AnimationClip newClip;
+                    newClip.Name = newClipBuffer;
+                    newClip.FPS = 10.0f;
+                    newClip.Loop = true;
+                    ac.Clips.push_back(newClip);
+                    if (ac.CurrentClip.empty()) {
+                        ac.CurrentClip = newClip.Name;
+                    }
+                    newClipBuffer[0] = '\0';
+                }
+                
+                int clipToDelete = -1;
+                for (int i = 0; i < static_cast<int>(ac.Clips.size()); i++) {
+                    auto& clip = ac.Clips[i];
+                    bool isCurrent = (ac.CurrentClip == clip.Name);
+                    
+                    ImGui::PushID(i);
+                    if (ImGui::Selectable(clip.Name.c_str(), isCurrent)) {
+                        ac.CurrentClip = clip.Name;
+                        ac.CurrentFrame = 0;
+                        ac.Timer = 0.0f;
+                    }
+                    ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 60.0f);
+                    if (ImGui::Button("Delete")) {
+                        clipToDelete = i;
+                    }
+                    ImGui::PopID();
+                }
+                
+                if (clipToDelete >= 0) {
+                    std::string deletedName = ac.Clips[clipToDelete].Name;
+                    ac.Clips.erase(ac.Clips.begin() + clipToDelete);
+                    if (ac.CurrentClip == deletedName) {
+                        ac.CurrentClip = ac.Clips.empty() ? "" : ac.Clips[0].Name;
+                        ac.CurrentFrame = 0;
+                        ac.Timer = 0.0f;
+                    }
+                }
+                
+                ImGui::Separator();
+                
+                // 3. Edit current clip
+                PixelEngine::AnimationClip* currentClip = nullptr;
+                for (auto& c : ac.Clips) {
+                    if (c.Name == ac.CurrentClip) {
+                        currentClip = &c;
+                        break;
+                    }
+                }
+                
+                if (currentClip) {
+                    ImGui::Text("Editing Clip: %s", currentClip->Name.c_str());
+                    
+                    ImGui::SliderFloat("FPS", &currentClip->FPS, 1.0f, 60.0f);
+                    ImGui::Checkbox("Loop", &currentClip->Loop);
+                    
+                    // Display preview/playback controls
+                    ImGui::Checkbox("Play Preview", &ac.Playing);
+                    
+                    ImGui::Text("Timeline Frames (Count: %d):", (int)currentClip->Frames.size());
+                    
+                    // List frames in current clip
+                    int frameToMoveUp = -1;
+                    int frameToMoveDown = -1;
+                    int frameToRemove = -1;
+                    
+                    for (int i = 0; i < static_cast<int>(currentClip->Frames.size()); i++) {
+                        auto& frame = currentClip->Frames[i];
+                        ImGui::PushID(i);
+                        
+                        ImGui::Text("[%d] Frame: %s", i, frame.FrameName.c_str());
+                        ImGui::SameLine();
+                        
+                        char eventBuf[64];
+                        strncpy_s(eventBuf, frame.EventName.c_str(), sizeof(eventBuf));
+                        ImGui::SetNextItemWidth(100.0f);
+                        if (ImGui::InputText("Event", eventBuf, sizeof(eventBuf))) {
+                            frame.EventName = eventBuf;
+                        }
+                        
+                        ImGui::SameLine();
+                        if (ImGui::Button("^") && i > 0) {
+                            frameToMoveUp = i;
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("v") && i < static_cast<int>(currentClip->Frames.size()) - 1) {
+                            frameToMoveDown = i;
+                        }
+                        ImGui::SameLine();
+                        if (ImGui::Button("X")) {
+                            frameToRemove = i;
+                        }
+                        
+                        ImGui::PopID();
+                    }
+                    
+                    if (frameToMoveUp >= 0) {
+                        std::swap(currentClip->Frames[frameToMoveUp], currentClip->Frames[frameToMoveUp - 1]);
+                    }
+                    if (frameToMoveDown >= 0) {
+                        std::swap(currentClip->Frames[frameToMoveDown], currentClip->Frames[frameToMoveDown + 1]);
+                    }
+                    if (frameToRemove >= 0) {
+                        currentClip->Frames.erase(currentClip->Frames.begin() + frameToRemove);
+                    }
+                    
+                    ImGui::Separator();
+                    ImGui::Text("Add Frame from Sprite Sheet:");
+                    
+                    // Show available frames from the spritesheet
+                    for (const auto& [frameName, frameData] : spritesheet->Frames) {
+                        if (ImGui::Button(frameName.c_str())) {
+                            PixelEngine::AnimationFrame newFrame;
+                            newFrame.FrameName = frameName;
+                            newFrame.EventName = "";
+                            currentClip->Frames.push_back(newFrame);
+                        }
+                    }
+                }
+            } else {
+                ImGui::Text("No Sprite Sheet loaded on this animator.");
+            }
+        } else {
+            ImGui::Text("Select an entity with an Animator Component to edit animations.");
+        }
+        ImGui::End();
+
+        // 9. Audio Mixer Panel
+        ImGui::Begin("Audio Mixer");
+        {
+            float masterVol = PixelEngine::AudioManager::GetMasterVolume();
+            if (ImGui::SliderFloat("Master Volume", &masterVol, 0.0f, 1.0f)) {
+                PixelEngine::AudioManager::SetMasterVolume(masterVol);
+            }
+
+            float musicVol = PixelEngine::AudioManager::GetMusicVolume();
+            if (ImGui::SliderFloat("Music Volume", &musicVol, 0.0f, 1.0f)) {
+                PixelEngine::AudioManager::SetMusicVolume(musicVol);
+            }
+
+            float sfxVol = PixelEngine::AudioManager::GetSFXVolume();
+            if (ImGui::SliderFloat("SFX Volume", &sfxVol, 0.0f, 1.0f)) {
+                PixelEngine::AudioManager::SetSFXVolume(sfxVol);
+            }
+        }
+        ImGui::End();
 
         // End Dockspace window
         ImGui::End();
@@ -955,6 +1495,10 @@ private:
     float m_RotationSpeed = 50.0f;
 
     PixelEngine::UUID testTexture;
+
+    enum class BrushType { Paint = 0, Erase = 1 };
+    BrushType m_BrushType = BrushType::Paint;
+    uint32_t m_SelectedTileIndex = 1;
 };
 
 int main(int argc, char* argv[]) {

@@ -9,6 +9,7 @@
 #include <glm/glm.hpp>
 #include <memory>
 #include <vector>
+#include <array>
 
 namespace PixelEngine {
 
@@ -18,6 +19,7 @@ namespace PixelEngine {
         UUID TextureID;
         BlendMode Blend;
         int RenderLayer;
+        std::array<glm::vec2, 4> UVs;
     };
 
     class Renderer2D {
@@ -35,7 +37,9 @@ namespace PixelEngine {
         static void Flush();
 
         static void SubmitQuad(const glm::mat4& transform, UUID textureID, const glm::vec4& color, BlendMode blend = BlendMode::AlphaBlend, int renderLayer = 0);
+        static void SubmitQuad(const glm::mat4& transform, UUID textureID, const glm::vec4& color, BlendMode blend, int renderLayer, const std::array<glm::vec2, 4>& uvs);
         static void SubmitQuad(const glm::vec2& position, const glm::vec2& size, float rotation, UUID textureID, const glm::vec4& color, BlendMode blend = BlendMode::AlphaBlend, int renderLayer = 0);
+        static void SubmitQuad(const glm::vec2& position, const glm::vec2& size, float rotation, UUID textureID, const glm::vec4& color, BlendMode blend, int renderLayer, const std::array<glm::vec2, 4>& uvs);
 
         static void ResetStats();
         static Statistics GetStats();

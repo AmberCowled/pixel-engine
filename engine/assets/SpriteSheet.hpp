@@ -2,28 +2,25 @@
 
 #include <engine/core/UUID.hpp>
 #include <glm/glm.hpp>
-#include <string>
 #include <array>
+#include <unordered_map>
+#include <string>
 
 namespace PixelEngine {
 
-    enum class BlendMode {
-        Opaque = 0,
-        AlphaBlend,
-        Additive
-    };
-
-    struct Material {
-        std::string ShaderName = "sprite";
-        UUID TextureID = 0;
-        glm::vec4 Color{1.0f, 1.0f, 1.0f, 1.0f};
-        BlendMode Blend = BlendMode::AlphaBlend;
+    struct SpriteSheetFrame {
         std::array<glm::vec2, 4> UVs = {
             glm::vec2{ 0.0f, 0.0f },
             glm::vec2{ 1.0f, 0.0f },
             glm::vec2{ 1.0f, 1.0f },
             glm::vec2{ 0.0f, 1.0f }
         };
+    };
+
+    struct SpriteSheet {
+        UUID ID = 0;
+        UUID TextureID = 0;
+        std::unordered_map<std::string, SpriteSheetFrame> Frames;
     };
 
 }

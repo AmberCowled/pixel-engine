@@ -115,8 +115,73 @@ namespace PixelEngine {
                 sprite.Mat.TextureID,
                 sprite.Mat.Color,
                 sprite.Mat.Blend,
-                0 // Render Layer
+                0, // Render Layer
+                sprite.Mat.UVs
             );
+        }
+
+        // Render Tilemaps via Renderer2D
+        auto tilemapView = scene.m_Registry.view<TransformComponent, TilemapComponent>();
+        for (auto entity : tilemapView) {
+            auto& tilemap = tilemapView.get<TilemapComponent>(entity);
+            auto tileset = AssetManager::GetTileset(tilemap.TilesetID);
+            if (!tileset || tileset->TextureID == 0) continue;
+
+            auto tex = AssetManager::GetTexture(tileset->TextureID);
+            if (!tex) continue;
+
+            float texWidth = (float)tex->GetWidth();
+            float texHeight = (float)tex->GetHeight();
+            uint32_t tileSize = tileset->TileSize;
+            uint32_t cols = static_cast<uint32_t>(texWidth) / tileSize;
+            if (cols == 0) cols = 1;
+
+            glm::mat4 worldTransform = scene.GetWorldTransform({entity, &scene});
+
+            for (const auto& [coords, chunk] : tilemap.Chunks) {
+                int cx = coords.first;
+                int cy = coords.second;
+
+                for (int ty = 0; ty < TilemapChunk::ChunkSize; ty++) {
+                    for (int tx = 0; tx < TilemapChunk::ChunkSize; tx++) {
+                        int idx = ty * TilemapChunk::ChunkSize + tx;
+                        uint32_t tileIndex = chunk.Tiles[idx].TileIndex;
+                        if (tileIndex == 0) continue; // Empty
+
+                        // Calculate tile local position (Y-up coordinates)
+                        float xLocal = static_cast<float>(cx * TilemapChunk::ChunkSize + tx);
+                        float yLocal = static_cast<float>(cy * TilemapChunk::ChunkSize + ty);
+
+                        glm::mat4 tileLocalTransform = glm::translate(glm::mat4(1.0f), glm::vec3(xLocal, yLocal, 0.0f));
+                        glm::mat4 tileWorldTransform = worldTransform * tileLocalTransform;
+
+                        // Calculate UVs (Y-up layout in tileset image)
+                        uint32_t col = (tileIndex - 1) % cols;
+                        uint32_t row = (tileIndex - 1) / cols;
+
+                        float uMin = (col * tileSize) / texWidth;
+                        float uMax = ((col + 1) * tileSize) / texWidth;
+                        float vMin = (row * tileSize) / texHeight;
+                        float vMax = ((row + 1) * tileSize) / texHeight;
+
+                        std::array<glm::vec2, 4> tileUVs = {
+                            glm::vec2{ uMin, vMin },
+                            glm::vec2{ uMax, vMin },
+                            glm::vec2{ uMax, vMax },
+                            glm::vec2{ uMin, vMax }
+                        };
+
+                        Renderer2D::SubmitQuad(
+                            tileWorldTransform,
+                            tileset->TextureID,
+                            glm::vec4(1.0f),
+                            BlendMode::AlphaBlend,
+                            tilemap.RenderLayer,
+                            tileUVs
+                        );
+                    }
+                }
+            }
         }
 
         Renderer2D::EndScene();
