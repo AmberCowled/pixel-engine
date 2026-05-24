@@ -119,6 +119,73 @@ namespace PixelEngine {
                 entityJson["SpriteAnimationComponent"] = animJson;
             }
 
+            // 9. Tilemap Component
+            if (entity.HasComponent<TilemapComponent>()) {
+                auto& tc = entity.GetComponent<TilemapComponent>();
+                json tmJson;
+                tmJson["TilesetID"] = static_cast<uint64_t>(tc.TilesetID);
+                tmJson["TileSize"] = tc.TileSize;
+                tmJson["RenderLayer"] = tc.RenderLayer;
+                
+                json chunksJson = json::array();
+                for (const auto& [coords, chunk] : tc.Chunks) {
+                    json chunkJson;
+                    chunkJson["x"] = coords.first;
+                    chunkJson["y"] = coords.second;
+                    
+                    json tilesJson = json::array();
+                    for (const auto& tile : chunk.Tiles) {
+                        tilesJson.push_back(tile.TileIndex);
+                    }
+                    chunkJson["Tiles"] = tilesJson;
+                    chunksJson.push_back(chunkJson);
+                }
+                tmJson["Chunks"] = chunksJson;
+                entityJson["TilemapComponent"] = tmJson;
+            }
+
+            // 10. Animator Component
+            if (entity.HasComponent<AnimatorComponent>()) {
+                auto& ac = entity.GetComponent<AnimatorComponent>();
+                json animJson;
+                animJson["SpriteSheetID"] = static_cast<uint64_t>(ac.SpriteSheetID);
+                animJson["CurrentClip"] = ac.CurrentClip;
+                animJson["CurrentFrame"] = ac.CurrentFrame;
+                animJson["Playing"] = ac.Playing;
+
+                json clipsJson = json::array();
+                for (const auto& clip : ac.Clips) {
+                    json clipJson;
+                    clipJson["Name"] = clip.Name;
+                    clipJson["FPS"] = clip.FPS;
+                    clipJson["Loop"] = clip.Loop;
+
+                    json framesJson = json::array();
+                    for (const auto& frame : clip.Frames) {
+                        json frameJson;
+                        frameJson["FrameName"] = frame.FrameName;
+                        frameJson["EventName"] = frame.EventName;
+                        framesJson.push_back(frameJson);
+                    }
+                    clipJson["Frames"] = framesJson;
+                    clipsJson.push_back(clipJson);
+                }
+                animJson["Clips"] = clipsJson;
+                entityJson["AnimatorComponent"] = animJson;
+            }
+
+            // 11. Audio Source Component
+            if (entity.HasComponent<AudioSourceComponent>()) {
+                auto& asc = entity.GetComponent<AudioSourceComponent>();
+                json audioJson;
+                audioJson["ClipID"] = static_cast<uint64_t>(asc.ClipID);
+                audioJson["Loop"] = asc.Loop;
+                audioJson["PlayOnStart"] = asc.PlayOnStart;
+                audioJson["Volume"] = asc.Volume;
+                audioJson["IsMusic"] = asc.IsMusic;
+                entityJson["AudioSourceComponent"] = audioJson;
+            }
+
             entitiesJson.push_back(entityJson);
         }
 
@@ -213,6 +280,76 @@ namespace PixelEngine {
                 ac.FrameTime = acJson.value("FrameTime", 0.1f);
                 ac.Loop = acJson.value("Loop", true);
                 ac.Playing = acJson.value("Playing", true);
+            }
+
+            // 7. Tilemap Component
+            if (entityJson.find("TilemapComponent") != entityJson.end()) {
+                auto& tc = entity.AddComponent<TilemapComponent>();
+                auto& tmJson = entityJson["TilemapComponent"];
+                tc.TilesetID = UUID(tmJson.value("TilesetID", 0ull));
+                tc.TileSize = tmJson.value("TileSize", 16u);
+                tc.RenderLayer = tmJson.value("RenderLayer", 0);
+                
+                if (tmJson.contains("Chunks") && tmJson["Chunks"].is_array()) {
+                    for (auto& chunkJson : tmJson["Chunks"]) {
+                        int cx = chunkJson.value("x", 0);
+                        int cy = chunkJson.value("y", 0);
+                        
+                        TilemapChunk chunk;
+                        if (chunkJson.contains("Tiles") && chunkJson["Tiles"].is_array()) {
+                            int idx = 0;
+                            for (auto& tileVal : chunkJson["Tiles"]) {
+                                if (idx < TilemapChunk::ChunkSize * TilemapChunk::ChunkSize) {
+                                    chunk.Tiles[idx].TileIndex = tileVal.get<uint32_t>();
+                                    idx++;
+                                }
+                            }
+                        }
+                        tc.Chunks[{cx, cy}] = chunk;
+                    }
+                }
+            }
+
+            // 8. Animator Component
+            if (entityJson.find("AnimatorComponent") != entityJson.end()) {
+                auto& ac = entity.AddComponent<AnimatorComponent>();
+                auto& acJson = entityJson["AnimatorComponent"];
+                ac.SpriteSheetID = UUID(acJson.value("SpriteSheetID", 0ull));
+                ac.CurrentClip = acJson.value("CurrentClip", "");
+                ac.CurrentFrame = acJson.value("CurrentFrame", 0);
+                ac.Playing = acJson.value("Playing", true);
+
+                if (acJson.contains("Clips") && acJson["Clips"].is_array()) {
+                    for (auto& clipJson : acJson["Clips"]) {
+                        AnimationClip clip;
+                        clip.Name = clipJson.value("Name", "");
+                        clip.FPS = clipJson.value("FPS", 10.0f);
+                        clip.Loop = clipJson.value("Loop", true);
+
+                        if (clipJson.contains("Frames") && clipJson["Frames"].is_array()) {
+                            for (auto& frameJson : clipJson["Frames"]) {
+                                AnimationFrame frame;
+                                frame.FrameName = frameJson.value("FrameName", "");
+                                frame.EventName = frameJson.value("EventName", "");
+                                clip.Frames.push_back(frame);
+                            }
+                        }
+                        ac.Clips.push_back(clip);
+                    }
+                }
+            }
+
+            // 9. Audio Source Component
+            if (entityJson.find("AudioSourceComponent") != entityJson.end()) {
+                auto& asc = entity.AddComponent<AudioSourceComponent>();
+                auto& audioJson = entityJson["AudioSourceComponent"];
+                asc.ClipID = UUID(audioJson.value("ClipID", 0ull));
+                asc.Loop = audioJson.value("Loop", false);
+                asc.PlayOnStart = audioJson.value("PlayOnStart", false);
+                asc.Volume = audioJson.value("Volume", 1.0f);
+                asc.IsMusic = audioJson.value("IsMusic", false);
+                asc.Stream = nullptr;
+                asc.IsPlaying = false;
             }
         }
         return true;

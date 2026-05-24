@@ -10,7 +10,9 @@ namespace PixelEngine {
         Texture,
         Audio,
         Shader,
-        Scene
+        Scene,
+        Tileset,
+        SpriteSheet
     };
 
     struct AssetMetadata {

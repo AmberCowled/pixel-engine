@@ -23,6 +23,7 @@ namespace PixelEngine {
         void DestroyEntity(Entity entity);
 
         void OnUpdate(float deltaTime);
+        void StopAllAudio();
 
         glm::mat4 GetWorldTransform(Entity entity);
         Entity GetEntityByUUID(UUID uuid);
@@ -33,6 +34,7 @@ namespace PixelEngine {
     private:
         entt::registry m_Registry;
         std::unordered_map<UUID, entt::entity> m_EntityMap;
+        bool m_AudioInitialized = false;
 
         friend class Entity;
         friend class RenderSystem;

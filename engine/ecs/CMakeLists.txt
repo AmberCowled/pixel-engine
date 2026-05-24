@@ -18,5 +18,6 @@ target_link_libraries(engine-ecs
         engine-core
         EnTT::EnTT
         engine-assets
+        engine-audio
         nlohmann_json::nlohmann_json
 )

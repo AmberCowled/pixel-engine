@@ -3,6 +3,7 @@ add_library(engine-assets STATIC
     AssetManager.hpp
     AssetManager.cpp
     AssetMetadata.hpp
+    AudioClip.hpp
     AssetWatcher.hpp
     AssetWatcher.cpp
 )

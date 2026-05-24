@@ -19,6 +19,9 @@ namespace PixelEngine {
 
     void AssetManager::Shutdown() {
         s_Textures.clear();
+        s_Tilesets.clear();
+        s_SpriteSheets.clear();
+        s_AudioClips.clear();
         s_MetadataRegistry.clear();
         s_PathToUUID.clear();
         s_Context = nullptr;
@@ -27,19 +30,23 @@ namespace PixelEngine {
 
     static std::string AssetTypeToString(AssetType type) {
         switch (type) {
-            case AssetType::Texture: return "Texture";
-            case AssetType::Audio:   return "Audio";
-            case AssetType::Shader:  return "Shader";
-            case AssetType::Scene:   return "Scene";
-            default:                 return "None";
+            case AssetType::Texture:     return "Texture";
+            case AssetType::Audio:       return "Audio";
+            case AssetType::Shader:      return "Shader";
+            case AssetType::Scene:       return "Scene";
+            case AssetType::Tileset:     return "Tileset";
+            case AssetType::SpriteSheet: return "SpriteSheet";
+            default:                     return "None";
         }
     }
 
     static AssetType StringToAssetType(const std::string& str) {
-        if (str == "Texture") return AssetType::Texture;
-        if (str == "Audio")   return AssetType::Audio;
-        if (str == "Shader")  return AssetType::Shader;
-        if (str == "Scene")   return AssetType::Scene;
+        if (str == "Texture")     return AssetType::Texture;
+        if (str == "Audio")       return AssetType::Audio;
+        if (str == "Shader")      return AssetType::Shader;
+        if (str == "Scene")       return AssetType::Scene;
+        if (str == "Tileset")     return AssetType::Tileset;
+        if (str == "SpriteSheet") return AssetType::SpriteSheet;
         return AssetType::None;
     }
 
@@ -51,6 +58,8 @@ namespace PixelEngine {
         if (ext == ".wav" || ext == ".ogg" || ext == ".mp3") return AssetType::Audio;
         if (ext == ".vert" || ext == ".frag" || ext == ".spv") return AssetType::Shader;
         if (ext == ".json") return AssetType::Scene;
+        if (ext == ".tileset") return AssetType::Tileset;
+        if (ext == ".spritesheet") return AssetType::SpriteSheet;
         return AssetType::None;
     }
 
@@ -293,6 +302,229 @@ namespace PixelEngine {
             return it->second.Type;
         }
         return AssetType::None;
+    }
+
+    std::shared_ptr<Tileset> AssetManager::GetTileset(UUID handle) {
+        auto it = s_Tilesets.find(handle);
+        if (it != s_Tilesets.end()) {
+            return it->second;
+        }
+
+        std::string path = GetAssetPath(handle);
+        if (!path.empty() && GetAssetType(handle) == AssetType::Tileset) {
+            LoadTileset(path);
+            auto it2 = s_Tilesets.find(handle);
+            if (it2 != s_Tilesets.end()) {
+                return it2->second;
+            }
+        }
+        return nullptr;
+    }
+
+    std::shared_ptr<SpriteSheet> AssetManager::GetSpriteSheet(UUID handle) {
+        auto it = s_SpriteSheets.find(handle);
+        if (it != s_SpriteSheets.end()) {
+            return it->second;
+        }
+
+        std::string path = GetAssetPath(handle);
+        if (!path.empty() && GetAssetType(handle) == AssetType::SpriteSheet) {
+            LoadSpriteSheet(path);
+            auto it2 = s_SpriteSheets.find(handle);
+            if (it2 != s_SpriteSheets.end()) {
+                return it2->second;
+            }
+        }
+        return nullptr;
+    }
+
+    UUID AssetManager::LoadTileset(const std::string& path) {
+        std::string absolutePath = std::filesystem::absolute(path).string();
+        UUID handle = 0;
+
+        auto it = s_PathToUUID.find(absolutePath);
+        if (it != s_PathToUUID.end()) {
+            handle = it->second;
+        } else {
+            handle = UUID();
+            s_PathToUUID[absolutePath] = handle;
+
+            AssetMetadata meta;
+            meta.ID = handle;
+            meta.Type = AssetType::Tileset;
+            meta.SourcePath = std::filesystem::relative(path, s_AssetsRoot).string();
+            s_MetadataRegistry[handle] = meta;
+        }
+
+        if (s_Tilesets.find(handle) != s_Tilesets.end()) {
+            return handle;
+        }
+
+        std::ifstream fin(path);
+        if (!fin.is_open()) {
+            PX_CORE_ERROR("Failed to open tileset file: {0}", path);
+            return 0;
+        }
+
+        try {
+            json tsJson;
+            fin >> tsJson;
+
+            auto tileset = std::make_shared<Tileset>();
+            tileset->ID = handle;
+            tileset->TileSize = tsJson.value("tileSize", 16u);
+
+            std::string relativeTexPath = tsJson.value("texturePath", "");
+            if (!relativeTexPath.empty()) {
+                std::filesystem::path texAbsPath = std::filesystem::path(s_AssetsRoot) / relativeTexPath;
+                tileset->TextureID = LoadTexture(texAbsPath.string());
+            }
+
+            if (tsJson.contains("solidTiles") && tsJson["solidTiles"].is_array()) {
+                for (auto& item : tsJson["solidTiles"]) {
+                    if (item.is_number()) {
+                        tileset->SolidTiles[item.get<uint32_t>()] = true;
+                    }
+                }
+            }
+
+            s_Tilesets[handle] = tileset;
+        } catch (const std::exception& e) {
+            PX_CORE_ERROR("Failed to parse tileset JSON {0}: {1}", path, e.what());
+            return 0;
+        }
+
+        return handle;
+    }
+
+    UUID AssetManager::LoadSpriteSheet(const std::string& path) {
+        std::string absolutePath = std::filesystem::absolute(path).string();
+        UUID handle = 0;
+
+        auto it = s_PathToUUID.find(absolutePath);
+        if (it != s_PathToUUID.end()) {
+            handle = it->second;
+        } else {
+            handle = UUID();
+            s_PathToUUID[absolutePath] = handle;
+
+            AssetMetadata meta;
+            meta.ID = handle;
+            meta.Type = AssetType::SpriteSheet;
+            meta.SourcePath = std::filesystem::relative(path, s_AssetsRoot).string();
+            s_MetadataRegistry[handle] = meta;
+        }
+
+        if (s_SpriteSheets.find(handle) != s_SpriteSheets.end()) {
+            return handle;
+        }
+
+        std::ifstream fin(path);
+        if (!fin.is_open()) {
+            PX_CORE_ERROR("Failed to open spritesheet file: {0}", path);
+            return 0;
+        }
+
+        try {
+            json ssJson;
+            fin >> ssJson;
+
+            auto spritesheet = std::make_shared<SpriteSheet>();
+            spritesheet->ID = handle;
+
+            std::string relativeTexPath = ssJson.value("texturePath", "");
+            if (!relativeTexPath.empty()) {
+                std::filesystem::path texAbsPath = std::filesystem::path(s_AssetsRoot) / relativeTexPath;
+                spritesheet->TextureID = LoadTexture(texAbsPath.string());
+            }
+
+            auto tex = GetTexture(spritesheet->TextureID);
+            float texWidth = tex ? (float)tex->GetWidth() : 1.0f;
+            float texHeight = tex ? (float)tex->GetHeight() : 1.0f;
+
+            if (ssJson.contains("frames") && ssJson["frames"].is_object()) {
+                for (auto& [frameName, frameData] : ssJson["frames"].items()) {
+                    float fx = frameData.value("x", 0.0f);
+                    float fy = frameData.value("y", 0.0f);
+                    float fw = frameData.value("w", 0.0f);
+                    float fh = frameData.value("h", 0.0f);
+
+                    SpriteSheetFrame frame;
+                    float uMin = fx / texWidth;
+                    float uMax = (fx + fw) / texWidth;
+                    float vMin = fy / texHeight;
+                    float vMax = (fy + fh) / texHeight;
+
+                    frame.UVs = {
+                        glm::vec2{ uMin, vMin },
+                        glm::vec2{ uMax, vMin },
+                        glm::vec2{ uMax, vMax },
+                        glm::vec2{ uMin, vMax }
+                    };
+
+                    spritesheet->Frames[frameName] = frame;
+                }
+            }
+
+            s_SpriteSheets[handle] = spritesheet;
+        } catch (const std::exception& e) {
+            PX_CORE_ERROR("Failed to parse spritesheet JSON {0}: {1}", path, e.what());
+            return 0;
+        }
+
+        return handle;
+    }
+
+    std::shared_ptr<AudioClip> AssetManager::GetAudioClip(UUID handle) {
+        auto it = s_AudioClips.find(handle);
+        if (it != s_AudioClips.end()) {
+            return it->second;
+        }
+
+        std::string path = GetAssetPath(handle);
+        if (!path.empty() && GetAssetType(handle) == AssetType::Audio) {
+            LoadAudioClip(path);
+            auto it2 = s_AudioClips.find(handle);
+            if (it2 != s_AudioClips.end()) {
+                return it2->second;
+            }
+        }
+        return nullptr;
+    }
+
+    UUID AssetManager::LoadAudioClip(const std::string& path) {
+        std::string absolutePath = std::filesystem::absolute(path).string();
+        UUID handle = 0;
+
+        auto it = s_PathToUUID.find(absolutePath);
+        if (it != s_PathToUUID.end()) {
+            handle = it->second;
+        } else {
+            handle = UUID();
+            s_PathToUUID[absolutePath] = handle;
+
+            AssetMetadata meta;
+            meta.ID = handle;
+            meta.Type = AssetType::Audio;
+            meta.SourcePath = std::filesystem::relative(path, s_AssetsRoot).string();
+            s_MetadataRegistry[handle] = meta;
+        }
+
+        if (s_AudioClips.find(handle) != s_AudioClips.end()) {
+            return handle;
+        }
+
+        auto clip = std::make_shared<AudioClip>();
+        clip->ID = handle;
+        clip->Path = path;
+
+        if (!SDL_LoadWAV(path.c_str(), &clip->Spec, &clip->Buffer, &clip->Length)) {
+            PX_CORE_ERROR("AssetManager: Failed to load WAV file {0}: {1}", path, SDL_GetError());
+            return 0;
+        }
+
+        s_AudioClips[handle] = clip;
+        return handle;
     }
 
 }

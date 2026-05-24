@@ -1,11 +1,15 @@
 #pragma once
 
 #include <engine/core/UUID.hpp>
+#include <SDL3/SDL.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #define GLM_ENABLE_EXPERIMENTAL
 #include <glm/gtx/quaternion.hpp>
 #include <string>
+#include <array>
+#include <map>
+#include <vector>
 
 #include <engine/renderer/Material.hpp>
 #include <string>
@@ -87,6 +91,70 @@ namespace PixelEngine {
 
         SpriteAnimationComponent() = default;
         SpriteAnimationComponent(const SpriteAnimationComponent&) = default;
+    };
+
+    struct TilemapTile {
+        uint32_t TileIndex = 0;
+    };
+
+    struct TilemapChunk {
+        static constexpr int ChunkSize = 16;
+        std::array<TilemapTile, ChunkSize * ChunkSize> Tiles;
+
+        TilemapChunk() {
+            Tiles.fill(TilemapTile{0});
+        }
+    };
+
+    struct TilemapComponent {
+        UUID TilesetID = 0;
+        uint32_t TileSize = 16;
+        int RenderLayer = 0;
+
+        std::map<std::pair<int, int>, TilemapChunk> Chunks;
+
+        TilemapComponent() = default;
+        TilemapComponent(const TilemapComponent&) = default;
+    };
+
+    struct AnimationFrame {
+        std::string FrameName;
+        std::string EventName;
+    };
+
+    struct AnimationClip {
+        std::string Name;
+        std::vector<AnimationFrame> Frames;
+        float FPS = 10.0f;
+        bool Loop = true;
+    };
+
+    struct AnimatorComponent {
+        UUID SpriteSheetID = 0;
+        std::string CurrentClip = "";
+        int CurrentFrame = 0;
+        float Timer = 0.0f;
+        bool Playing = true;
+
+        std::vector<AnimationClip> Clips;
+
+        AnimatorComponent() = default;
+        AnimatorComponent(const AnimatorComponent&) = default;
+    };
+
+    struct AudioSourceComponent {
+        UUID ClipID = 0;
+        bool Loop = false;
+        bool PlayOnStart = false;
+        float Volume = 1.0f;
+        bool IsMusic = false;
+
+        // Runtime state (ignored in serialization)
+        SDL_AudioStream* Stream = nullptr;
+        bool IsPlaying = false;
+
+        AudioSourceComponent() = default;
+        AudioSourceComponent(const AudioSourceComponent&) = default;
     };
 
 }
