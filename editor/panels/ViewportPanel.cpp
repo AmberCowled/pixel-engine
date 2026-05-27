@@ -92,7 +92,10 @@ namespace PixelEngine {
                 ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.1f, 0.7f)); // Translucent dark background
                 ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 5.0f);
                 
-                if (ImGui::BeginChild("ViewportToolbar", ImVec2(340.0f, 32.0f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+                if (ImGui::BeginChild("ViewportToolbar", ImVec2(360.0f, 32.0f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 3.0f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 0.0f));
+
                     ImGui::AlignTextToFramePadding();
                     ImGui::SetCursorPosX(5.0f);
                     ImGui::SetCursorPosY(4.0f);
@@ -100,7 +103,7 @@ namespace PixelEngine {
                     // Select/None Tool (Q)
                     bool isSelect = (m_Context.GizmoType == -1);
                     if (isSelect) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
-                    if (ImGui::Button("Select##Tool", ImVec2(55.0f, 24.0f))) {
+                    if (ImGui::Button("Select##Tool", ImVec2(0.0f, 24.0f))) {
                         m_Context.GizmoType = -1;
                     }
                     if (isSelect) ImGui::PopStyleColor();
@@ -109,7 +112,7 @@ namespace PixelEngine {
                     // Translate Tool (W)
                     bool isTranslate = (m_Context.GizmoType == ImGuizmo::TRANSLATE);
                     if (isTranslate) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
-                    if (ImGui::Button("Move##Tool", ImVec2(45.0f, 24.0f))) {
+                    if (ImGui::Button("Move##Tool", ImVec2(0.0f, 24.0f))) {
                         m_Context.GizmoType = ImGuizmo::TRANSLATE;
                     }
                     if (isTranslate) ImGui::PopStyleColor();
@@ -118,7 +121,7 @@ namespace PixelEngine {
                     // Rotate Tool (E)
                     bool isRotate = (m_Context.GizmoType == ImGuizmo::ROTATE);
                     if (isRotate) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
-                    if (ImGui::Button("Rot##Tool", ImVec2(40.0f, 24.0f))) {
+                    if (ImGui::Button("Rotate##Tool", ImVec2(0.0f, 24.0f))) {
                         m_Context.GizmoType = ImGuizmo::ROTATE;
                     }
                     if (isRotate) ImGui::PopStyleColor();
@@ -127,7 +130,7 @@ namespace PixelEngine {
                     // Scale Tool (R)
                     bool isScale = (m_Context.GizmoType == ImGuizmo::SCALE);
                     if (isScale) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
-                    if (ImGui::Button("Scale##Tool", ImVec2(45.0f, 24.0f))) {
+                    if (ImGui::Button("Scale##Tool", ImVec2(0.0f, 24.0f))) {
                         m_Context.GizmoType = ImGuizmo::SCALE;
                     }
                     if (isScale) ImGui::PopStyleColor();
@@ -138,17 +141,19 @@ namespace PixelEngine {
 
                     // Local vs World space toggle
                     const char* spaceStr = (m_Context.GizmoSpace == ImGuizmo::LOCAL) ? "Local" : "World";
-                    if (ImGui::Button(spaceStr, ImVec2(50.0f, 24.0f))) {
+                    if (ImGui::Button(spaceStr, ImVec2(0.0f, 24.0f))) {
                         m_Context.GizmoSpace = (m_Context.GizmoSpace == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
                     }
                     ImGui::SameLine();
 
                     // Snap toggle
                     if (m_Context.SnapEnabled) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
-                    if (ImGui::Button("Snap", ImVec2(45.0f, 24.0f))) {
+                    if (ImGui::Button("Snap", ImVec2(0.0f, 24.0f))) {
                         m_Context.SnapEnabled = !m_Context.SnapEnabled;
                     }
                     if (m_Context.SnapEnabled) ImGui::PopStyleColor();
+
+                    ImGui::PopStyleVar(2);
                 }
                 ImGui::EndChild();
                 ImGui::PopStyleVar();

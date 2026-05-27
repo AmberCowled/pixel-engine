@@ -36,7 +36,7 @@ namespace PixelEngine {
         // Hide specific internal files
         if (ext == ".csproj" || ext == ".sln" || ext == ".suo" || ext == ".user" ||
             ext == ".dll" || ext == ".exe" || ext == ".pdb" || ext == ".log" || 
-            filename == "imgui.ini") {
+            filename == "imgui.ini" || filename == "asset_registry.json") {
             return true;
         }
 
