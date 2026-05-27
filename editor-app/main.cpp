@@ -566,7 +566,7 @@ public:
             scissor.extent = extent;
             vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-            if (m_Context.ProjectLoaded) {
+            if (m_Context.ProjectLoaded && m_Context.OffscreenBuffer) {
                 m_UpscalePipeline->Bind(commandBuffer);
 
                 VkBuffer vertexBuffers[] = {m_QuadVertexBuffer->GetBuffer()};
