@@ -72,7 +72,5 @@ namespace PixelEngine {
         bool m_FrameHasFinished[MAX_FRAMES_IN_FLIGHT]{};
     };
 
-    // To be defined in client
-    EngineApp* CreateApplication();
 
 }

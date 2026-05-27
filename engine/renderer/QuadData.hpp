@@ -15,13 +15,5 @@ namespace PixelEngine {
 
     const std::vector<uint16_t> FULLSCREEN_TRIANGLE_INDICES = { 0, 1, 2 };
 
-    const std::vector<Vertex> SPRITE_VERTICES = {
-        {{-0.5f, -0.5f, 0.0f}, {1,1,1}, {0.0f, 0.0f}},
-        {{ 0.5f, -0.5f, 0.0f}, {1,1,1}, {1.0f, 0.0f}},
-        {{ 0.5f,  0.5f, 0.0f}, {1,1,1}, {1.0f, 1.0f}},
-        {{-0.5f,  0.5f, 0.0f}, {1,1,1}, {0.0f, 1.0f}}
-    };
-
-    const std::vector<uint16_t> SPRITE_INDICES = { 0, 1, 2, 2, 3, 0 };
 
 }

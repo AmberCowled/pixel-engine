@@ -58,5 +58,16 @@ CPMAddPackage(
     GIT_TAG v3.11.2
 )
 
+# GoogleTest - C++ Unit Testing Framework
+CPMAddPackage(
+    NAME GTest
+    GIT_REPOSITORY https://github.com/google/googletest.git
+    GIT_TAG v1.14.0
+    OPTIONS
+        "INSTALL_GTEST OFF"
+        "gtest_force_shared_crt ON"
+        "BUILD_GMOCK OFF"
+)
+
 # Vulkan SDK
 find_package(Vulkan REQUIRED)

@@ -10,9 +10,7 @@
 #include <array>
 #include <map>
 #include <vector>
-
 #include <engine/renderer/Material.hpp>
-#include <string>
 
 namespace PixelEngine {
 
