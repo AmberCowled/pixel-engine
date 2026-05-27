@@ -2,9 +2,22 @@ namespace PixelEngine {
     public abstract class Component {
         public Entity Entity => InstanceEntity;
         internal Entity InstanceEntity { get; set; } = null!;
+
+        public bool Enabled {
+            get => InternalCalls.GetComponentEnabled(Entity.ID, GetComponentType());
+            set => InternalCalls.SetComponentEnabled(Entity.ID, GetComponentType(), value);
+        }
+
+        protected abstract int GetComponentType();
+
+        public bool HasComponent<T>() where T : Component, new() => Entity.HasComponent<T>();
+        public T AddComponent<T>() where T : Component, new() => Entity.AddComponent<T>();
+        public T GetComponent<T>() where T : Component, new() => Entity.GetComponent<T>();
     }
 
     public class TransformComponent : Component {
+        protected override int GetComponentType() => 0;
+
         public Vector3 Translation {
             get {
                 InternalCalls.GetTransform(Entity.ID, out Vector3 trans, out _, out _);
@@ -40,12 +53,16 @@ namespace PixelEngine {
     }
 
     public class SpriteRendererComponent : Component {
+        protected override int GetComponentType() => 1;
     }
 
     public class MeshRendererComponent : Component {
+        protected override int GetComponentType() => 2;
     }
 
     public class VelocityComponent : Component {
+        protected override int GetComponentType() => 3;
+
         public Vector3 Linear {
             get {
                 InternalCalls.GetVelocity(Entity.ID, out Vector3 lin, out _);

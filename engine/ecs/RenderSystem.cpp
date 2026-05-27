@@ -78,6 +78,7 @@ namespace PixelEngine {
         for (auto entity : meshView) {
             auto& transform = meshView.get<TransformComponent>(entity);
             auto& mesh = meshView.get<MeshRendererComponent>(entity);
+            if (!mesh.Enabled) continue;
 
             // Push Constants
             PushConstantData push{};
@@ -109,6 +110,7 @@ namespace PixelEngine {
         for (auto entity : spriteView) {
             auto& transform = spriteView.get<TransformComponent>(entity);
             auto& sprite = spriteView.get<SpriteRendererComponent>(entity);
+            if (!sprite.Enabled) continue;
 
             Renderer2D::SubmitQuad(
                 scene.GetWorldTransform({entity, &scene}),
@@ -124,6 +126,7 @@ namespace PixelEngine {
         auto tilemapView = scene.m_Registry.view<TransformComponent, TilemapComponent>();
         for (auto entity : tilemapView) {
             auto& tilemap = tilemapView.get<TilemapComponent>(entity);
+            if (!tilemap.Enabled) continue;
             auto tileset = AssetManager::GetTileset(tilemap.TilesetID);
             if (!tileset || tileset->TextureID == 0) continue;
 

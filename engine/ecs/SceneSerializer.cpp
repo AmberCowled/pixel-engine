@@ -64,6 +64,7 @@ namespace PixelEngine {
             if (entity.HasComponent<SpriteRendererComponent>()) {
                 auto& sc = entity.GetComponent<SpriteRendererComponent>();
                 json spriteJson;
+                spriteJson["Enabled"] = sc.Enabled;
                 spriteJson["Material"] = {
                     {"ShaderName", sc.Mat.ShaderName},
                     {"TextureID", static_cast<uint64_t>(sc.Mat.TextureID)},
@@ -77,6 +78,7 @@ namespace PixelEngine {
             if (entity.HasComponent<MeshRendererComponent>()) {
                 auto& mc = entity.GetComponent<MeshRendererComponent>();
                 json meshJson;
+                meshJson["Enabled"] = mc.Enabled;
                 meshJson["Color"] = SerializeVec4(mc.Color);
                 meshJson["TextureID"] = static_cast<uint64_t>(mc.TextureID);
                 entityJson["MeshRendererComponent"] = meshJson;
@@ -99,6 +101,7 @@ namespace PixelEngine {
             if (entity.HasComponent<VelocityComponent>()) {
                 auto& vc = entity.GetComponent<VelocityComponent>();
                 json velocityJson;
+                velocityJson["Enabled"] = vc.Enabled;
                 velocityJson["Linear"] = SerializeVec3(vc.Linear);
                 velocityJson["Angular"] = SerializeVec3(vc.Angular);
                 entityJson["VelocityComponent"] = velocityJson;
@@ -108,6 +111,7 @@ namespace PixelEngine {
             if (entity.HasComponent<SpriteAnimationComponent>()) {
                 auto& ac = entity.GetComponent<SpriteAnimationComponent>();
                 json animJson;
+                animJson["Enabled"] = ac.Enabled;
                 json framesJson = json::array();
                 for (auto texID : ac.Textures) {
                     framesJson.push_back(static_cast<uint64_t>(texID));
@@ -123,6 +127,7 @@ namespace PixelEngine {
             if (entity.HasComponent<TilemapComponent>()) {
                 auto& tc = entity.GetComponent<TilemapComponent>();
                 json tmJson;
+                tmJson["Enabled"] = tc.Enabled;
                 tmJson["TilesetID"] = static_cast<uint64_t>(tc.TilesetID);
                 tmJson["TileSize"] = tc.TileSize;
                 tmJson["RenderLayer"] = tc.RenderLayer;
@@ -148,6 +153,7 @@ namespace PixelEngine {
             if (entity.HasComponent<AnimatorComponent>()) {
                 auto& ac = entity.GetComponent<AnimatorComponent>();
                 json animJson;
+                animJson["Enabled"] = ac.Enabled;
                 animJson["SpriteSheetID"] = static_cast<uint64_t>(ac.SpriteSheetID);
                 animJson["CurrentClip"] = ac.CurrentClip;
                 animJson["CurrentFrame"] = ac.CurrentFrame;
@@ -178,6 +184,7 @@ namespace PixelEngine {
             if (entity.HasComponent<AudioSourceComponent>()) {
                 auto& asc = entity.GetComponent<AudioSourceComponent>();
                 json audioJson;
+                audioJson["Enabled"] = asc.Enabled;
                 audioJson["ClipID"] = static_cast<uint64_t>(asc.ClipID);
                 audioJson["Loop"] = asc.Loop;
                 audioJson["PlayOnStart"] = asc.PlayOnStart;
@@ -204,6 +211,7 @@ namespace PixelEngine {
             if (entity.HasComponent<ScriptComponent>()) {
                 auto& sc = entity.GetComponent<ScriptComponent>();
                 json scriptJson;
+                scriptJson["Enabled"] = sc.Enabled;
                 scriptJson["ClassName"] = sc.ClassName;
                 entityJson["ScriptComponent"] = scriptJson;
             }
@@ -259,6 +267,7 @@ namespace PixelEngine {
             if (entityJson.find("SpriteRendererComponent") != entityJson.end()) {
                 auto& sc = entity.AddComponent<SpriteRendererComponent>();
                 auto& scJson = entityJson["SpriteRendererComponent"];
+                sc.Enabled = scJson.value("Enabled", true);
                 auto& matJson = scJson["Material"];
                 sc.Mat.ShaderName = matJson.value("ShaderName", "sprite");
                 sc.Mat.TextureID = UUID(matJson["TextureID"].get<uint64_t>());
@@ -270,6 +279,7 @@ namespace PixelEngine {
             if (entityJson.find("MeshRendererComponent") != entityJson.end()) {
                 auto& mc = entity.AddComponent<MeshRendererComponent>();
                 auto& mcJson = entityJson["MeshRendererComponent"];
+                mc.Enabled = mcJson.value("Enabled", true);
                 mc.Color = DeserializeVec4(mcJson["Color"]);
                 mc.TextureID = UUID(mcJson["TextureID"].get<uint64_t>());
             }
@@ -288,6 +298,7 @@ namespace PixelEngine {
             if (entityJson.find("VelocityComponent") != entityJson.end()) {
                 auto& vc = entity.AddComponent<VelocityComponent>();
                 auto& vcJson = entityJson["VelocityComponent"];
+                vc.Enabled = vcJson.value("Enabled", true);
                 vc.Linear = DeserializeVec3(vcJson["Linear"]);
                 vc.Angular = DeserializeVec3(vcJson["Angular"]);
             }
@@ -296,6 +307,7 @@ namespace PixelEngine {
             if (entityJson.find("SpriteAnimationComponent") != entityJson.end()) {
                 auto& ac = entity.AddComponent<SpriteAnimationComponent>();
                 auto& acJson = entityJson["SpriteAnimationComponent"];
+                ac.Enabled = acJson.value("Enabled", true);
                 for (auto& frameVal : acJson["Textures"]) {
                     ac.Textures.push_back(UUID(frameVal.get<uint64_t>()));
                 }
@@ -308,6 +320,7 @@ namespace PixelEngine {
             if (entityJson.find("TilemapComponent") != entityJson.end()) {
                 auto& tc = entity.AddComponent<TilemapComponent>();
                 auto& tmJson = entityJson["TilemapComponent"];
+                tc.Enabled = tmJson.value("Enabled", true);
                 tc.TilesetID = UUID(tmJson.value("TilesetID", 0ull));
                 tc.TileSize = tmJson.value("TileSize", 16u);
                 tc.RenderLayer = tmJson.value("RenderLayer", 0);
@@ -336,6 +349,7 @@ namespace PixelEngine {
             if (entityJson.find("AnimatorComponent") != entityJson.end()) {
                 auto& ac = entity.AddComponent<AnimatorComponent>();
                 auto& acJson = entityJson["AnimatorComponent"];
+                ac.Enabled = acJson.value("Enabled", true);
                 ac.SpriteSheetID = UUID(acJson.value("SpriteSheetID", 0ull));
                 ac.CurrentClip = acJson.value("CurrentClip", "");
                 ac.CurrentFrame = acJson.value("CurrentFrame", 0);
@@ -365,6 +379,7 @@ namespace PixelEngine {
             if (entityJson.find("AudioSourceComponent") != entityJson.end()) {
                 auto& asc = entity.AddComponent<AudioSourceComponent>();
                 auto& audioJson = entityJson["AudioSourceComponent"];
+                asc.Enabled = audioJson.value("Enabled", true);
                 asc.ClipID = UUID(audioJson.value("ClipID", 0ull));
                 asc.Loop = audioJson.value("Loop", false);
                 asc.PlayOnStart = audioJson.value("PlayOnStart", false);
@@ -391,6 +406,7 @@ namespace PixelEngine {
             if (entityJson.find("ScriptComponent") != entityJson.end()) {
                 auto& sc = entity.AddComponent<ScriptComponent>();
                 auto& scJson = entityJson["ScriptComponent"];
+                sc.Enabled = scJson.value("Enabled", true);
                 sc.ClassName = scJson.value("ClassName", "");
             }
         }

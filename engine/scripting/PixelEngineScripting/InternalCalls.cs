@@ -24,6 +24,12 @@ namespace PixelEngine {
         [UnmanagedFunctionPointer(CallingConvention.StdCall)]
         public delegate void SetVelocityCallback(ulong entityID, ref Vector3 linear, ref Vector3 angular);
 
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate bool GetComponentEnabledCallback(ulong entityID, int componentType);
+
+        [UnmanagedFunctionPointer(CallingConvention.StdCall)]
+        public delegate void SetComponentEnabledCallback(ulong entityID, int componentType, bool enabled);
+
         public static LogCallback Log = null!;
         public static GetTransformCallback GetTransform = null!;
         public static SetTransformCallback SetTransform = null!;
@@ -31,5 +37,7 @@ namespace PixelEngine {
         public static AddComponentCallback AddComponent = null!;
         public static GetVelocityCallback GetVelocity = null!;
         public static SetVelocityCallback SetVelocity = null!;
+        public static GetComponentEnabledCallback GetComponentEnabled = null!;
+        public static SetComponentEnabledCallback SetComponentEnabled = null!;
     }
 }

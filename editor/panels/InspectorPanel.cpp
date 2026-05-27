@@ -12,8 +12,90 @@
 #include <engine/base/Log.hpp>
 #include <algorithm>
 #include <cstring>
+#include <type_traits>
 
 namespace PixelEngine {
+
+    template<typename T, typename = void>
+    struct has_enabled : std::false_type {};
+
+    template<typename T>
+    struct has_enabled<T, std::void_t<decltype(std::declval<T>().Enabled)>> : std::true_type {};
+
+    template<typename T>
+    constexpr bool has_enabled_v = has_enabled<T>::value;
+
+    template<typename T, typename UIFunc, typename ResetFunc, typename RemoveFunc>
+    static void DrawComponentUI(const std::string& name, Entity entity, EditorContext& context, UIFunc uiFunc, ResetFunc resetFunc, RemoveFunc removeFunc) {
+        if (entity.HasComponent<T>()) {
+            auto& component = entity.GetComponent<T>();
+            ImGui::PushID(name.c_str());
+
+            // 1. Enablement Checkbox (only if component supports it)
+            if constexpr (has_enabled_v<T>) {
+                bool enabled = component.Enabled;
+                if (ImGui::Checkbox("##enabled", &enabled)) {
+                    component.Enabled = enabled;
+                    TrackOverride(entity, name + "Component.Enabled");
+                }
+                ImGui::SameLine();
+            }
+
+            // 2. Collapsing Header
+            bool open = ImGui::CollapsingHeader(name.c_str(), ImGuiTreeNodeFlags_DefaultOpen);
+
+            if (open) {
+                // 3. Gear Settings Button (top-right of the body)
+                ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0, 0, 0, 0));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImVec4(0.3f, 0.3f, 0.3f, 0.4f));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive, ImVec4(0.4f, 0.4f, 0.4f, 0.6f));
+                
+                float rightAlign = ImGui::GetContentRegionAvail().x - 20.0f;
+                ImGui::SetCursorPosX(ImGui::GetCursorPosX() + rightAlign);
+                
+                if (ImGui::Button(ICON_FA_GEAR "##gear")) {
+                    ImGui::OpenPopup("ComponentSettings");
+                }
+                ImGui::PopStyleColor(3);
+
+                if (ImGui::BeginPopup("ComponentSettings")) {
+                    if (ImGui::MenuItem("Reset")) {
+                        SceneSerializer serializer(*context.ActiveScene);
+                        nlohmann::json beforeState = serializer.SerializeToJson();
+                        
+                        resetFunc(component);
+                        
+                        nlohmann::json afterState = serializer.SerializeToJson();
+                        EditorHistory::PushCommand(
+                            std::make_unique<SceneSnapshotCommand>(context.ActiveScene, beforeState, afterState, "Reset " + name)
+                        );
+                        TrackOverride(entity, name + "Component.Reset");
+                    }
+                    
+                    if constexpr (!std::is_same_v<T, TransformComponent>) {
+                        if (ImGui::MenuItem("Remove Component")) {
+                            SceneSerializer serializer(*context.ActiveScene);
+                            nlohmann::json beforeState = serializer.SerializeToJson();
+                            
+                            removeFunc(component);
+                            entity.RemoveComponent<T>();
+                            
+                            nlohmann::json afterState = serializer.SerializeToJson();
+                            EditorHistory::PushCommand(
+                                std::make_unique<SceneSnapshotCommand>(context.ActiveScene, beforeState, afterState, "Remove " + name)
+                            );
+                        }
+                    }
+                    ImGui::EndPopup();
+                }
+                
+                // Draw component contents
+                uiFunc(component);
+            }
+
+            ImGui::PopID();
+        }
+    }
 
     void InspectorPanel::OnImGuiRender() {
         ImGui::Begin("Inspector");
@@ -49,10 +131,9 @@ namespace PixelEngine {
 
             ImGui::Separator();
 
-            if (m_Context.SelectedEntity.HasComponent<TransformComponent>()) {
-                if (ImGui::CollapsingHeader("Transform", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& tc = m_Context.SelectedEntity.GetComponent<TransformComponent>();
-                    
+            // Transform Component
+            DrawComponentUI<TransformComponent>("Transform", m_Context.SelectedEntity, m_Context,
+                [&](TransformComponent& tc) {
                     static nlohmann::json beforeEditState;
                     static bool isEditing = false;
                     
@@ -84,12 +165,18 @@ namespace PixelEngine {
                         );
                         isEditing = false;
                     }
-                }
-            }
+                },
+                [&](TransformComponent& tc) {
+                    tc.Translation = glm::vec3(0.0f);
+                    tc.Rotation = glm::vec3(0.0f);
+                    tc.Scale = glm::vec3(1.0f);
+                },
+                [](TransformComponent&) {}
+            );
 
-            if (m_Context.SelectedEntity.HasComponent<MeshRendererComponent>()) {
-                if (ImGui::CollapsingHeader("Mesh Renderer", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& mc = m_Context.SelectedEntity.GetComponent<MeshRendererComponent>();
+            // Mesh Renderer Component
+            DrawComponentUI<MeshRendererComponent>("Mesh Renderer", m_Context.SelectedEntity, m_Context,
+                [&](MeshRendererComponent& mc) {
                     if (ImGui::ColorEdit4("Mesh Color", &mc.Color.x)) {
                         TrackOverride(m_Context.SelectedEntity, "MeshRendererComponent.Color");
                     }
@@ -113,12 +200,18 @@ namespace PixelEngine {
                         }
                         ImGui::EndDragDropTarget();
                     }
-                }
-            }
+                },
+                [&](MeshRendererComponent& mc) {
+                    mc.Color = glm::vec4(1.0f);
+                    mc.TextureID = 0;
+                    mc.Enabled = true;
+                },
+                [](MeshRendererComponent&) {}
+            );
 
-            if (m_Context.SelectedEntity.HasComponent<SpriteRendererComponent>()) {
-                if (ImGui::CollapsingHeader("Sprite Renderer", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& sc = m_Context.SelectedEntity.GetComponent<SpriteRendererComponent>();
+            // Sprite Renderer Component
+            DrawComponentUI<SpriteRendererComponent>("Sprite Renderer", m_Context.SelectedEntity, m_Context,
+                [&](SpriteRendererComponent& sc) {
                     if (ImGui::ColorEdit4("Sprite Color", &sc.Mat.Color.x)) {
                         TrackOverride(m_Context.SelectedEntity, "SpriteRendererComponent.Color");
                     }
@@ -149,27 +242,35 @@ namespace PixelEngine {
                         }
                         ImGui::EndDragDropTarget();
                     }
-                }
-            }
+                },
+                [&](SpriteRendererComponent& sc) {
+                    sc.Mat = Material();
+                    sc.Enabled = true;
+                },
+                [](SpriteRendererComponent&) {}
+            );
 
-            if (m_Context.SelectedEntity.HasComponent<VelocityComponent>()) {
-                if (ImGui::CollapsingHeader("Velocity", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& vc = m_Context.SelectedEntity.GetComponent<VelocityComponent>();
+            // Velocity Component
+            DrawComponentUI<VelocityComponent>("Velocity", m_Context.SelectedEntity, m_Context,
+                [&](VelocityComponent& vc) {
                     if (ImGui::DragFloat3("Linear", &vc.Linear.x, 0.05f)) {
                         TrackOverride(m_Context.SelectedEntity, "VelocityComponent.Linear");
                     }
                     if (ImGui::DragFloat3("Angular", &vc.Angular.x, 0.05f)) {
                         TrackOverride(m_Context.SelectedEntity, "VelocityComponent.Angular");
                     }
-                    if (ImGui::Button("Remove Velocity")) {
-                        m_Context.SelectedEntity.RemoveComponent<VelocityComponent>();
-                    }
-                }
-            }
+                },
+                [&](VelocityComponent& vc) {
+                    vc.Linear = glm::vec3(0.0f);
+                    vc.Angular = glm::vec3(0.0f);
+                    vc.Enabled = true;
+                },
+                [](VelocityComponent&) {}
+            );
 
-            if (m_Context.SelectedEntity.HasComponent<HierarchyComponent>()) {
-                if (ImGui::CollapsingHeader("Hierarchy", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& hc = m_Context.SelectedEntity.GetComponent<HierarchyComponent>();
+            // Hierarchy Component
+            DrawComponentUI<HierarchyComponent>("Hierarchy", m_Context.SelectedEntity, m_Context,
+                [&](HierarchyComponent& hc) {
                     if (hc.Parent != 0) {
                         auto parentEntity = m_Context.ActiveScene->GetEntityByUUID(hc.Parent);
                         if (parentEntity) {
@@ -190,16 +291,32 @@ namespace PixelEngine {
                     } else {
                         ImGui::Text("No Parent");
                     }
-                    
-                    if (ImGui::Button("Remove Hierarchy Component")) {
-                        m_Context.SelectedEntity.RemoveComponent<HierarchyComponent>();
+                },
+                [&](HierarchyComponent& hc) {
+                    auto parentEnt = m_Context.ActiveScene->GetEntityByUUID(hc.Parent);
+                    if (parentEnt && parentEnt.HasComponent<HierarchyComponent>()) {
+                        auto& parentHc = parentEnt.GetComponent<HierarchyComponent>();
+                        auto myUUID = m_Context.SelectedEntity.GetComponent<IDComponent>().ID;
+                        parentHc.Children.erase(std::remove(parentHc.Children.begin(), parentHc.Children.end(), myUUID), parentHc.Children.end());
                     }
+                    hc.Parent = 0;
+                    hc.Children.clear();
+                },
+                [&](HierarchyComponent& hc) {
+                    auto parentEnt = m_Context.ActiveScene->GetEntityByUUID(hc.Parent);
+                    if (parentEnt && parentEnt.HasComponent<HierarchyComponent>()) {
+                        auto& parentHc = parentEnt.GetComponent<HierarchyComponent>();
+                        auto myUUID = m_Context.SelectedEntity.GetComponent<IDComponent>().ID;
+                        parentHc.Children.erase(std::remove(parentHc.Children.begin(), parentHc.Children.end(), myUUID), parentHc.Children.end());
+                    }
+                    hc.Parent = 0;
+                    hc.Children.clear();
                 }
-            }
+            );
 
-            if (m_Context.SelectedEntity.HasComponent<SpriteAnimationComponent>()) {
-                if (ImGui::CollapsingHeader("Sprite Animation", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& ac = m_Context.SelectedEntity.GetComponent<SpriteAnimationComponent>();
+            // Sprite Animation Component
+            DrawComponentUI<SpriteAnimationComponent>("Sprite Animation", m_Context.SelectedEntity, m_Context,
+                [&](SpriteAnimationComponent& ac) {
                     if (ImGui::Checkbox("Playing", &ac.Playing)) {
                         TrackOverride(m_Context.SelectedEntity, "SpriteAnimationComponent.Playing");
                     }
@@ -221,15 +338,22 @@ namespace PixelEngine {
                         TrackOverride(m_Context.SelectedEntity, "SpriteAnimationComponent.Textures");
                         TrackOverride(m_Context.SelectedEntity, "SpriteAnimationComponent.Playing");
                     }
-                    if (ImGui::Button("Remove Animation")) {
-                        m_Context.SelectedEntity.RemoveComponent<SpriteAnimationComponent>();
-                    }
-                }
-            }
+                },
+                [&](SpriteAnimationComponent& ac) {
+                    ac.Textures.clear();
+                    ac.FrameTime = 0.1f;
+                    ac.CurrentFrame = 0;
+                    ac.Timer = 0.0f;
+                    ac.Loop = true;
+                    ac.Playing = true;
+                    ac.Enabled = true;
+                },
+                [](SpriteAnimationComponent&) {}
+            );
 
-            if (m_Context.SelectedEntity.HasComponent<TilemapComponent>()) {
-                if (ImGui::CollapsingHeader("Tilemap Component", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& tc = m_Context.SelectedEntity.GetComponent<TilemapComponent>();
+            // Tilemap Component
+            DrawComponentUI<TilemapComponent>("Tilemap Component", m_Context.SelectedEntity, m_Context,
+                [&](TilemapComponent& tc) {
                     ImGui::Text("Tileset UUID: %llu", (uint64_t)tc.TilesetID);
                     if (tc.TilesetID != 0) {
                         ImGui::Text("Path: %s", AssetManager::GetAssetPath(tc.TilesetID).c_str());
@@ -261,16 +385,20 @@ namespace PixelEngine {
                         tc.TileSize = static_cast<uint32_t>(tileSize);
                         TrackOverride(m_Context.SelectedEntity, "TilemapComponent.TileSize");
                     }
+                },
+                [&](TilemapComponent& tc) {
+                    tc.TilesetID = 0;
+                    tc.TileSize = 16;
+                    tc.RenderLayer = 0;
+                    tc.Enabled = true;
+                    tc.Chunks.clear();
+                },
+                [](TilemapComponent&) {}
+            );
 
-                    if (ImGui::Button("Remove Tilemap")) {
-                        m_Context.SelectedEntity.RemoveComponent<TilemapComponent>();
-                    }
-                }
-            }
-
-            if (m_Context.SelectedEntity.HasComponent<AnimatorComponent>()) {
-                if (ImGui::CollapsingHeader("Animator Component", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& ac = m_Context.SelectedEntity.GetComponent<AnimatorComponent>();
+            // Animator Component
+            DrawComponentUI<AnimatorComponent>("Animator Component", m_Context.SelectedEntity, m_Context,
+                [&](AnimatorComponent& ac) {
                     ImGui::Text("Spritesheet UUID: %llu", (uint64_t)ac.SpriteSheetID);
                     if (ac.SpriteSheetID != 0) {
                         ImGui::Text("Path: %s", AssetManager::GetAssetPath(ac.SpriteSheetID).c_str());
@@ -296,16 +424,22 @@ namespace PixelEngine {
                     }
                     ImGui::Text("Current Clip: %s", ac.CurrentClip.c_str());
                     ImGui::Text("Current Frame: %d", ac.CurrentFrame);
+                },
+                [&](AnimatorComponent& ac) {
+                    ac.SpriteSheetID = 0;
+                    ac.CurrentClip = "";
+                    ac.CurrentFrame = 0;
+                    ac.Timer = 0.0f;
+                    ac.Playing = true;
+                    ac.Enabled = true;
+                    ac.Clips.clear();
+                },
+                [](AnimatorComponent&) {}
+            );
 
-                    if (ImGui::Button("Remove Animator")) {
-                        m_Context.SelectedEntity.RemoveComponent<AnimatorComponent>();
-                    }
-                }
-            }
-
-            if (m_Context.SelectedEntity.HasComponent<AudioSourceComponent>()) {
-                if (ImGui::CollapsingHeader("Audio Source Component", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& asc = m_Context.SelectedEntity.GetComponent<AudioSourceComponent>();
+            // Audio Source Component
+            DrawComponentUI<AudioSourceComponent>("Audio Source Component", m_Context.SelectedEntity, m_Context,
+                [&](AudioSourceComponent& asc) {
                     ImGui::Text("Audio Clip UUID: %llu", (uint64_t)asc.ClipID);
                     if (asc.ClipID != 0) {
                         ImGui::Text("Path: %s", AssetManager::GetAssetPath(asc.ClipID).c_str());
@@ -355,20 +489,31 @@ namespace PixelEngine {
                             asc.Stream = nullptr;
                         }
                     }
-
-                    if (ImGui::Button("Remove Audio Source")) {
-                        if (asc.Stream) {
-                            SDL_DestroyAudioStream(asc.Stream);
-                            asc.Stream = nullptr;
-                        }
-                        m_Context.SelectedEntity.RemoveComponent<AudioSourceComponent>();
+                },
+                [&](AudioSourceComponent& asc) {
+                    if (asc.Stream) {
+                        SDL_DestroyAudioStream(asc.Stream);
+                        asc.Stream = nullptr;
+                    }
+                    asc.ClipID = 0;
+                    asc.Loop = false;
+                    asc.PlayOnStart = false;
+                    asc.Volume = 1.0f;
+                    asc.IsMusic = false;
+                    asc.Enabled = true;
+                    asc.IsPlaying = false;
+                },
+                [&](AudioSourceComponent& asc) {
+                    if (asc.Stream) {
+                        SDL_DestroyAudioStream(asc.Stream);
+                        asc.Stream = nullptr;
                     }
                 }
-            }
+            );
 
-            if (m_Context.SelectedEntity.HasComponent<ScriptComponent>()) {
-                if (ImGui::CollapsingHeader("Script Component", ImGuiTreeNodeFlags_DefaultOpen)) {
-                    auto& sc = m_Context.SelectedEntity.GetComponent<ScriptComponent>();
+            // Script Component
+            DrawComponentUI<ScriptComponent>("Script Component", m_Context.SelectedEntity, m_Context,
+                [&](ScriptComponent& sc) {
                     char scriptBuffer[256];
                     std::memset(scriptBuffer, 0, sizeof(scriptBuffer));
                     std::strncpy(scriptBuffer, sc.ClassName.c_str(), sizeof(scriptBuffer) - 1);
@@ -376,11 +521,13 @@ namespace PixelEngine {
                         sc.ClassName = std::string(scriptBuffer);
                         TrackOverride(m_Context.SelectedEntity, "ScriptComponent.ClassName");
                     }
-                    if (ImGui::Button("Remove Script Component")) {
-                        m_Context.SelectedEntity.RemoveComponent<ScriptComponent>();
-                    }
-                }
-            }
+                },
+                [&](ScriptComponent& sc) {
+                    sc.ClassName = "";
+                    sc.Enabled = true;
+                },
+                [](ScriptComponent&) {}
+            );
 
             ImGui::Separator();
             if (ImGui::Button("Add Component", ImVec2(-1, 30))) {

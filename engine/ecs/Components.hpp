@@ -46,6 +46,7 @@ namespace PixelEngine {
 
     struct SpriteRendererComponent {
         Material Mat;
+        bool Enabled = true;
         
         SpriteRendererComponent() = default;
         SpriteRendererComponent(const SpriteRendererComponent&) = default;
@@ -55,6 +56,7 @@ namespace PixelEngine {
     struct MeshRendererComponent {
         glm::vec4 Color{1.0f, 1.0f, 1.0f, 1.0f};
         UUID TextureID = 0;
+        bool Enabled = true;
         
         MeshRendererComponent() = default;
         MeshRendererComponent(const MeshRendererComponent&) = default;
@@ -73,6 +75,7 @@ namespace PixelEngine {
     struct VelocityComponent {
         glm::vec3 Linear{0.0f, 0.0f, 0.0f};
         glm::vec3 Angular{0.0f, 0.0f, 0.0f};
+        bool Enabled = true;
 
         VelocityComponent() = default;
         VelocityComponent(const VelocityComponent&) = default;
@@ -86,6 +89,7 @@ namespace PixelEngine {
         float Timer = 0.0f;
         bool Loop = true;
         bool Playing = true;
+        bool Enabled = true;
 
         SpriteAnimationComponent() = default;
         SpriteAnimationComponent(const SpriteAnimationComponent&) = default;
@@ -108,6 +112,7 @@ namespace PixelEngine {
         UUID TilesetID = 0;
         uint32_t TileSize = 16;
         int RenderLayer = 0;
+        bool Enabled = true;
 
         std::map<std::pair<int, int>, TilemapChunk> Chunks;
 
@@ -133,6 +138,7 @@ namespace PixelEngine {
         int CurrentFrame = 0;
         float Timer = 0.0f;
         bool Playing = true;
+        bool Enabled = true;
 
         std::vector<AnimationClip> Clips;
 
@@ -146,6 +152,7 @@ namespace PixelEngine {
         bool PlayOnStart = false;
         float Volume = 1.0f;
         bool IsMusic = false;
+        bool Enabled = true;
 
         // Runtime state (ignored in serialization)
         SDL_AudioStream* Stream = nullptr;
@@ -168,6 +175,7 @@ namespace PixelEngine {
 
     struct ScriptComponent {
         std::string ClassName;
+        bool Enabled = true;
 
         ScriptComponent() = default;
         ScriptComponent(const ScriptComponent&) = default;
