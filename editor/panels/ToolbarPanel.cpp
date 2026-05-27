@@ -58,6 +58,30 @@ namespace PixelEngine {
                     ScriptEngine::SetActiveScene(m_Context.ActiveScene);
                 }
             }
+
+            // Snapping Settings popup/button on the right
+            if (m_Context.ProjectLoaded) {
+                ImGui::SameLine(ImGui::GetWindowContentRegionMax().x - 120.0f);
+                if (ImGui::Button(ICON_FA_GEAR " Snapping")) {
+                    ImGui::OpenPopup("SnapSettingsPopup");
+                }
+                
+                if (ImGui::BeginPopup("SnapSettingsPopup")) {
+                    ImGui::Text("Grid Snapping Settings");
+                    ImGui::Separator();
+                    
+                    ImGui::SetNextItemWidth(100.0f);
+                    ImGui::DragFloat("Translate", &m_Context.SnapTranslate, 0.05f, 0.01f, 10.0f, "%.2f");
+                    
+                    ImGui::SetNextItemWidth(100.0f);
+                    ImGui::DragFloat("Rotate (Deg)", &m_Context.SnapRotate, 1.0f, 1.0f, 180.0f, "%.0f");
+                    
+                    ImGui::SetNextItemWidth(100.0f);
+                    ImGui::DragFloat("Scale", &m_Context.SnapScale, 0.05f, 0.01f, 10.0f, "%.2f");
+                    
+                    ImGui::EndPopup();
+                }
+            }
         }
         ImGui::End();
     }

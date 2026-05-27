@@ -85,6 +85,84 @@ namespace PixelEngine {
             ImVec2 imageMin = ImGui::GetItemRectMin();
             ImVec2 imageSize = ImGui::GetItemRectSize();
 
+            // Floating Viewport Toolbar Overlay
+            if (m_Context.ProjectLoaded) {
+                ImVec2 originalCursorPos = ImGui::GetCursorPos();
+                ImGui::SetCursorScreenPos(ImVec2(imageMin.x + 10.0f, imageMin.y + 10.0f));
+                ImGui::PushStyleColor(ImGuiCol_ChildBg, ImVec4(0.1f, 0.1f, 0.1f, 0.7f)); // Translucent dark background
+                ImGui::PushStyleVar(ImGuiStyleVar_ChildRounding, 5.0f);
+                
+                if (ImGui::BeginChild("ViewportToolbar", ImVec2(360.0f, 32.0f), ImGuiChildFlags_None, ImGuiWindowFlags_NoScrollbar | ImGuiWindowFlags_NoScrollWithMouse)) {
+                    ImGui::PushStyleVar(ImGuiStyleVar_FramePadding, ImVec2(6.0f, 3.0f));
+                    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(4.0f, 0.0f));
+
+                    ImGui::AlignTextToFramePadding();
+                    ImGui::SetCursorPosX(5.0f);
+                    ImGui::SetCursorPosY(4.0f);
+                    
+                    // Select/None Tool (Q)
+                    bool isSelect = (m_Context.GizmoType == -1);
+                    if (isSelect) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
+                    if (ImGui::Button("Select##Tool", ImVec2(0.0f, 24.0f))) {
+                        m_Context.GizmoType = -1;
+                    }
+                    if (isSelect) ImGui::PopStyleColor();
+                    ImGui::SameLine();
+                    
+                    // Translate Tool (W)
+                    bool isTranslate = (m_Context.GizmoType == ImGuizmo::TRANSLATE);
+                    if (isTranslate) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
+                    if (ImGui::Button("Move##Tool", ImVec2(0.0f, 24.0f))) {
+                        m_Context.GizmoType = ImGuizmo::TRANSLATE;
+                    }
+                    if (isTranslate) ImGui::PopStyleColor();
+                    ImGui::SameLine();
+
+                    // Rotate Tool (E)
+                    bool isRotate = (m_Context.GizmoType == ImGuizmo::ROTATE);
+                    if (isRotate) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
+                    if (ImGui::Button("Rotate##Tool", ImVec2(0.0f, 24.0f))) {
+                        m_Context.GizmoType = ImGuizmo::ROTATE;
+                    }
+                    if (isRotate) ImGui::PopStyleColor();
+                    ImGui::SameLine();
+
+                    // Scale Tool (R)
+                    bool isScale = (m_Context.GizmoType == ImGuizmo::SCALE);
+                    if (isScale) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
+                    if (ImGui::Button("Scale##Tool", ImVec2(0.0f, 24.0f))) {
+                        m_Context.GizmoType = ImGuizmo::SCALE;
+                    }
+                    if (isScale) ImGui::PopStyleColor();
+                    
+                    ImGui::SameLine();
+                    ImGui::TextDisabled("|");
+                    ImGui::SameLine();
+
+                    // Local vs World space toggle
+                    const char* spaceStr = (m_Context.GizmoSpace == ImGuizmo::LOCAL) ? "Local" : "World";
+                    if (ImGui::Button(spaceStr, ImVec2(0.0f, 24.0f))) {
+                        m_Context.GizmoSpace = (m_Context.GizmoSpace == ImGuizmo::LOCAL) ? ImGuizmo::WORLD : ImGuizmo::LOCAL;
+                    }
+                    ImGui::SameLine();
+
+                    // Snap toggle
+                    if (m_Context.SnapEnabled) ImGui::PushStyleColor(ImGuiCol_Button, ImVec4(0.39f, 0.40f, 0.94f, 1.0f));
+                    if (ImGui::Button("Snap", ImVec2(0.0f, 24.0f))) {
+                        m_Context.SnapEnabled = !m_Context.SnapEnabled;
+                    }
+                    if (m_Context.SnapEnabled) ImGui::PopStyleColor();
+
+                    ImGui::PopStyleVar(2);
+                }
+                ImGui::EndChild();
+                ImGui::PopStyleVar();
+                ImGui::PopStyleColor();
+                
+                ImGui::SetCursorPos(originalCursorPos); // restore cursor pos
+                ImGui::Dummy(ImVec2(0.0f, 0.0f));
+            }
+
             if (m_Context.SelectedEntity && m_Context.SelectedEntity.HasComponent<TilemapComponent>() && m_Context.CurrentSceneState == SceneState::Edit) {
                 if (m_Context.ViewportHovered && !ImGuizmo::IsOver() && !ImGuizmo::IsUsing()) {
                     if (ImGui::IsMouseClicked(ImGuiMouseButton_Left)) {
@@ -236,7 +314,7 @@ namespace PixelEngine {
                 ImGuizmo::SetOrthographic(false);
                 ImGuizmo::SetDrawlist();
                 
-                ImGuizmo::SetRect(ImGui::GetWindowPos().x, ImGui::GetWindowPos().y, ImGui::GetWindowWidth(), ImGui::GetWindowHeight());
+                ImGuizmo::SetRect(imageMin.x, imageMin.y, imageSize.x, imageSize.y);
                 
                 glm::mat4 cameraProjection = m_Context.EditorCamera.GetProjection();
                 glm::mat4 cameraView = m_Context.EditorCamera.GetView();
@@ -244,12 +322,15 @@ namespace PixelEngine {
                 auto& tc = m_Context.SelectedEntity.GetComponent<TransformComponent>();
                 glm::mat4 transform = tc.GetTransform();
                 
-                bool snap = io.KeyCtrl;
+                // If snap is globally enabled, Ctrl disables it; if disabled, Ctrl enables it.
+                bool snap = m_Context.SnapEnabled ^ io.KeyCtrl;
                 float snapValue = 0.5f;
                 if (m_Context.GizmoType == ImGuizmo::TRANSLATE) {
-                    snapValue = 0.5f;
+                    snapValue = m_Context.SnapTranslate;
                 } else if (m_Context.GizmoType == ImGuizmo::ROTATE) {
-                    snapValue = 45.0f;
+                    snapValue = m_Context.SnapRotate;
+                } else if (m_Context.GizmoType == ImGuizmo::SCALE) {
+                    snapValue = m_Context.SnapScale;
                 }
                 float snapValues[3] = { snapValue, snapValue, snapValue };
                 
@@ -257,7 +338,7 @@ namespace PixelEngine {
                     glm::value_ptr(cameraView), 
                     glm::value_ptr(cameraProjection), 
                     (ImGuizmo::OPERATION)m_Context.GizmoType, 
-                    ImGuizmo::LOCAL, 
+                    (ImGuizmo::MODE)m_Context.GizmoSpace, 
                     glm::value_ptr(transform), 
                     nullptr, 
                     snap ? snapValues : nullptr

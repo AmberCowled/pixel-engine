@@ -70,6 +70,11 @@ namespace PixelEngine {
 
         // Gizmo & Viewport settings
         int GizmoType = -1; // -1 means none
+        int GizmoSpace = 0; // 0 = LOCAL, 1 = WORLD
+        bool SnapEnabled = false;
+        float SnapTranslate = 0.5f;
+        float SnapRotate = 45.0f;
+        float SnapScale = 0.5f;
         glm::vec2 ViewportSize{ 0.0f, 0.0f };
         VkDescriptorSet ViewportDescriptorSet = VK_NULL_HANDLE;
         std::unique_ptr<OffscreenTarget> OffscreenBuffer;
