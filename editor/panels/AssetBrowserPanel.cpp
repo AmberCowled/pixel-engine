@@ -15,11 +15,39 @@
 
 namespace PixelEngine {
 
+    static bool IsHiddenPath(const std::filesystem::path& path) {
+        std::string filename = path.filename().string();
+        std::string ext = path.extension().string();
+        std::transform(filename.begin(), filename.end(), filename.begin(), ::tolower);
+        std::transform(ext.begin(), ext.end(), ext.begin(), ::tolower);
+
+        // Hide files ending with .meta
+        if (filename.find(".meta") != std::string::npos || ext == ".meta") {
+            return true;
+        }
+
+        // Hide specific internal directories
+        if (filename == ".git" || filename == "build" || filename == "bin" || 
+            filename == "obj" || filename == "lib" || filename == ".vs" || 
+            filename == ".idea" || filename == ".vscode" || filename == "scratch") {
+            return true;
+        }
+
+        // Hide specific internal files
+        if (ext == ".csproj" || ext == ".sln" || ext == ".suo" || ext == ".user" ||
+            ext == ".dll" || ext == ".exe" || ext == ".pdb" || ext == ".log" || 
+            filename == "imgui.ini") {
+            return true;
+        }
+
+        return false;
+    }
+
     void AssetBrowserPanel::OnImGuiRender() {
         ImGui::Begin("Asset Browser");
         m_Context.AssetBrowserFocused = ImGui::IsWindowFocused(ImGuiFocusedFlags_RootAndChildWindows);
         {
-            std::filesystem::path assetRoot = m_Context.ProjectLoaded ? (std::filesystem::path(m_Context.ProjectPath) / "assets") : std::filesystem::path("assets");
+            std::filesystem::path assetRoot = m_Context.ProjectLoaded ? std::filesystem::path(m_Context.ProjectPath) : std::filesystem::path("assets");
             if (m_Context.CurrentDirectory.empty() || !std::filesystem::exists(m_Context.CurrentDirectory)) {
                 m_Context.CurrentDirectory = assetRoot;
             }
@@ -48,6 +76,7 @@ namespace PixelEngine {
             assetFilterChip("All", AssetFilter::All); ImGui::SameLine();
             assetFilterChip("Textures", AssetFilter::Textures); ImGui::SameLine();
             assetFilterChip("Audio", AssetFilter::Audio); ImGui::SameLine();
+            assetFilterChip("Scripts", AssetFilter::Scripts); ImGui::SameLine();
             assetFilterChip("Prefabs", AssetFilter::Prefabs); ImGui::SameLine();
             assetFilterChip("Scenes", AssetFilter::Scenes);
             ImGui::Separator();
@@ -65,7 +94,7 @@ namespace PixelEngine {
                     ImGui::SameLine();
                     ImGui::Text("Current Path: %s", std::filesystem::relative(m_Context.CurrentDirectory, assetRoot).string().c_str());
                 } else {
-                    ImGui::Text("Assets Root");
+                    ImGui::Text(m_Context.ProjectLoaded ? "Project Root" : "Assets Root");
                 }
                 ImGui::Separator();
             } else {
@@ -81,9 +110,14 @@ namespace PixelEngine {
 
             if (ImGui::BeginTable("AssetBrowserGridTable", columns)) {
                 if (isSearching) {
-                    for (const auto& entry : std::filesystem::recursive_directory_iterator(assetRoot)) {
-                        if (entry.is_regular_file()) {
-                            auto path = entry.path();
+                    for (auto it = std::filesystem::recursive_directory_iterator(assetRoot, std::filesystem::directory_options::skip_permission_denied);
+                         it != std::filesystem::recursive_directory_iterator(); ++it) {
+                        if (IsHiddenPath(it->path())) {
+                            it.disable_recursion_pending();
+                            continue;
+                        }
+                        if (it->is_regular_file()) {
+                            auto path = it->path();
                             if (MatchAssetFilter(path) && MatchAssetSearch(path, searchQuery)) {
                                 ImGui::TableNextColumn();
                                 DrawAssetGridItem(path, assetRoot);
@@ -92,14 +126,16 @@ namespace PixelEngine {
                     }
                 } else {
                     // 1. Draw directories
-                    for (const auto& entry : std::filesystem::directory_iterator(m_Context.CurrentDirectory)) {
+                    for (const auto& entry : std::filesystem::directory_iterator(m_Context.CurrentDirectory, std::filesystem::directory_options::skip_permission_denied)) {
+                        if (IsHiddenPath(entry.path())) continue;
                         if (entry.is_directory()) {
                             ImGui::TableNextColumn();
                             DrawDirectoryGridItem(entry.path(), assetRoot);
                         }
                     }
                     // 2. Draw files
-                    for (const auto& entry : std::filesystem::directory_iterator(m_Context.CurrentDirectory)) {
+                    for (const auto& entry : std::filesystem::directory_iterator(m_Context.CurrentDirectory, std::filesystem::directory_options::skip_permission_denied)) {
+                        if (IsHiddenPath(entry.path())) continue;
                         if (entry.is_regular_file()) {
                             auto path = entry.path();
                             if (MatchAssetFilter(path)) {
@@ -237,6 +273,8 @@ namespace PixelEngine {
                 iconLabel = ICON_FA_CUBES "\n\nPrefab";
             } else if (ext == ".json") {
                 iconLabel = ICON_FA_MAP "\n\nScene";
+            } else if (ext == ".cs") {
+                iconLabel = ICON_FA_FILE "\n\nScript";
             }
             
             if (isSelected) {
@@ -306,6 +344,8 @@ namespace PixelEngine {
                 return (ext == ".png" || ext == ".jpg" || ext == ".jpeg" || ext == ".tga");
             case AssetFilter::Audio:
                 return (ext == ".wav" || ext == ".ogg" || ext == ".mp3");
+            case AssetFilter::Scripts:
+                return (ext == ".cs");
             case AssetFilter::Prefabs:
                 return (ext == ".prefab" || filename.ends_with(".prefab.json"));
             case AssetFilter::Scenes:
