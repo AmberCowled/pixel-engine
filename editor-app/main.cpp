@@ -812,10 +812,10 @@ public:
                         return !std::isalnum(c) && c != '_';
                     }), className.end());
 
-                    if (!className.empty() && m_Context.ProjectLoaded && !m_Context.ProjectPath.empty()) {
-                        std::filesystem::path srcDir = std::filesystem::path(m_Context.ProjectPath) / "src";
-                        std::filesystem::create_directories(srcDir);
-                        std::filesystem::path scriptPath = srcDir / (className + ".cs");
+                    if (!className.empty() && m_Context.ProjectLoaded) {
+                        std::filesystem::path targetDir = m_Context.CurrentDirectory.empty() ? std::filesystem::path(m_Context.ProjectPath) : m_Context.CurrentDirectory;
+                        std::filesystem::create_directories(targetDir);
+                        std::filesystem::path scriptPath = targetDir / (className + ".cs");
 
                         std::ofstream scriptOut(scriptPath);
                         if (scriptOut.is_open()) {
