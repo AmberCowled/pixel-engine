@@ -23,7 +23,7 @@ namespace PixelEngine {
 
     enum class SceneState { Edit = 0, Play = 1, Pause = 2 };
     enum class HierarchyFilter { All = 0, Script, Sprite, Audio, Tilemap };
-    enum class AssetFilter { All = 0, Textures, Audio, Prefabs, Scenes };
+    enum class AssetFilter { All = 0, Textures, Audio, Scripts, Prefabs, Scenes };
     enum class BrushType { Paint = 0, Erase = 1 };
 
     struct EditorContext {
