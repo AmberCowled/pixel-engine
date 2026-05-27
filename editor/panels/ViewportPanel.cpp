@@ -155,6 +155,7 @@ namespace PixelEngine {
                 ImGui::PopStyleColor();
                 
                 ImGui::SetCursorPos(originalCursorPos); // restore cursor pos
+                ImGui::Dummy(ImVec2(0.0f, 0.0f));
             }
 
             if (m_Context.SelectedEntity && m_Context.SelectedEntity.HasComponent<TilemapComponent>() && m_Context.CurrentSceneState == SceneState::Edit) {
