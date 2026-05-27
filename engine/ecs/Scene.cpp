@@ -117,6 +117,7 @@ namespace PixelEngine {
         for (auto entity : physicsView) {
             auto& transform = physicsView.get<TransformComponent>(entity);
             auto& velocity = physicsView.get<VelocityComponent>(entity);
+            if (!velocity.Enabled) continue;
 
             // Move X
             transform.Translation.x += velocity.Linear.x * deltaTime;
@@ -142,6 +143,7 @@ namespace PixelEngine {
         for (auto entity : animView) {
             auto& sprite = animView.get<SpriteRendererComponent>(entity);
             auto& anim = animView.get<SpriteAnimationComponent>(entity);
+            if (!anim.Enabled) continue;
 
             if (!anim.Playing || anim.Textures.empty()) continue;
 
@@ -166,6 +168,7 @@ namespace PixelEngine {
         for (auto entity : animatorView) {
             auto& sprite = animatorView.get<SpriteRendererComponent>(entity);
             auto& animator = animatorView.get<AnimatorComponent>(entity);
+            if (!animator.Enabled) continue;
 
             if (!animator.Playing || animator.CurrentClip.empty()) continue;
 
@@ -214,6 +217,7 @@ namespace PixelEngine {
             auto audioView = m_Registry.view<AudioSourceComponent>();
             for (auto entity : audioView) {
                 auto& audio = audioView.get<AudioSourceComponent>(entity);
+                if (!audio.Enabled) continue;
                 if (audio.PlayOnStart) {
                     audio.IsPlaying = true;
                 }
@@ -224,6 +228,16 @@ namespace PixelEngine {
         auto audioView = m_Registry.view<AudioSourceComponent>();
         for (auto entity : audioView) {
             auto& audio = audioView.get<AudioSourceComponent>(entity);
+            if (!audio.Enabled) {
+                if (audio.IsPlaying || audio.Stream) {
+                    audio.IsPlaying = false;
+                    if (audio.Stream) {
+                        SDL_DestroyAudioStream(audio.Stream);
+                        audio.Stream = nullptr;
+                    }
+                }
+                continue;
+            }
             if (audio.IsPlaying) {
                 if (!audio.Stream) {
                     auto clip = AssetManager::GetAudioClip(audio.ClipID);

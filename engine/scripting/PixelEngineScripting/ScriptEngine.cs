@@ -6,7 +6,7 @@ using System.Runtime.InteropServices;
 namespace PixelEngine {
     public static class ScriptEngine {
         private static Assembly? s_GameAssembly = null;
-        private static Dictionary<ulong, ScriptableEntity> s_Instances = new Dictionary<ulong, ScriptableEntity>();
+        private static Dictionary<ulong, MonoBehaviour> s_Instances = new Dictionary<ulong, MonoBehaviour>();
 
         [UnmanagedCallersOnly]
         public static void Initialize(
@@ -16,7 +16,9 @@ namespace PixelEngine {
             IntPtr hasComponentCallback,
             IntPtr addComponentCallback,
             IntPtr getVelocityCallback,
-            IntPtr setVelocityCallback
+            IntPtr setVelocityCallback,
+            IntPtr getComponentEnabledCallback,
+            IntPtr setComponentEnabledCallback
         ) {
             InternalCalls.Log = Marshal.GetDelegateForFunctionPointer<InternalCalls.LogCallback>(logCallback);
             InternalCalls.GetTransform = Marshal.GetDelegateForFunctionPointer<InternalCalls.GetTransformCallback>(getTransformCallback);
@@ -25,6 +27,8 @@ namespace PixelEngine {
             InternalCalls.AddComponent = Marshal.GetDelegateForFunctionPointer<InternalCalls.AddComponentCallback>(addComponentCallback);
             InternalCalls.GetVelocity = Marshal.GetDelegateForFunctionPointer<InternalCalls.GetVelocityCallback>(getVelocityCallback);
             InternalCalls.SetVelocity = Marshal.GetDelegateForFunctionPointer<InternalCalls.SetVelocityCallback>(setVelocityCallback);
+            InternalCalls.GetComponentEnabled = Marshal.GetDelegateForFunctionPointer<InternalCalls.GetComponentEnabledCallback>(getComponentEnabledCallback);
+            InternalCalls.SetComponentEnabled = Marshal.GetDelegateForFunctionPointer<InternalCalls.SetComponentEnabledCallback>(setComponentEnabledCallback);
 
             InternalCalls.Log(0, Marshal.StringToHGlobalAnsi("ScriptEngine successfully initialized from C++!"));
         }
@@ -48,32 +52,30 @@ namespace PixelEngine {
         public static int CreateInstance(ulong entityID, IntPtr classNamePtr) {
             string? className = Marshal.PtrToStringAnsi(classNamePtr);
             if (string.IsNullOrEmpty(className)) return 0;
-
+ 
             if (s_GameAssembly == null) {
                 InternalCalls.Log(2, Marshal.StringToHGlobalAnsi("Cannot create script instance: No game assembly loaded."));
                 return 0;
             }
-
+ 
             try {
                 Type? type = s_GameAssembly.GetType(className);
                 if (type == null) {
                     InternalCalls.Log(2, Marshal.StringToHGlobalAnsi($"Could not find script class {className} in assembly."));
                     return 0;
                 }
-
-                if (!typeof(ScriptableEntity).IsAssignableFrom(type)) {
-                    InternalCalls.Log(2, Marshal.StringToHGlobalAnsi($"Class {className} does not inherit from ScriptableEntity."));
+ 
+                if (!typeof(MonoBehaviour).IsAssignableFrom(type)) {
+                    InternalCalls.Log(2, Marshal.StringToHGlobalAnsi($"Class {className} does not inherit from MonoBehaviour."));
                     return 0;
                 }
-
-                var instance = Activator.CreateInstance(type) as ScriptableEntity;
+ 
+                var instance = Activator.CreateInstance(type) as MonoBehaviour;
                 if (instance == null) return 0;
-
-                var backingField = typeof(Entity).GetField("<ID>k__BackingField", BindingFlags.NonPublic | BindingFlags.Instance);
-                if (backingField != null) {
-                    backingField.SetValue(instance, entityID);
-                }
-
+ 
+                var entityWrapper = new Entity(entityID);
+                instance.InstanceEntity = entityWrapper;
+ 
                 s_Instances[entityID] = instance;
                 return 1;
             } catch (Exception e) {

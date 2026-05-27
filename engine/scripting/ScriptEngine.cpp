@@ -50,7 +50,9 @@ namespace PixelEngine {
         void* hasComponentCallback,
         void* addComponentCallback,
         void* getVelocityCallback,
-        void* setVelocityCallback
+        void* setVelocityCallback,
+        void* getComponentEnabledCallback,
+        void* setComponentEnabledCallback
     );
     typedef int32_t (__stdcall *ScriptEngine_LoadAssembly_fn)(const char* assemblyPath);
     typedef int32_t (__stdcall *ScriptEngine_CreateInstance_fn)(uint64_t entityID, const char* className);
@@ -167,6 +169,41 @@ namespace PixelEngine {
         outAngular->y = vc.Angular.y;
         outAngular->z = vc.Angular.z;
         return true;
+    }
+
+    static bool __stdcall GetComponentEnabledCallback(uint64_t entityID, int componentType) {
+        auto scene = ScriptEngine::GetActiveScene();
+        if (!scene) return false;
+        Entity entity = scene->GetEntityByUUID(UUID(entityID));
+        if (!entity) return false;
+
+        if (componentType == 0) return true; // Transform is always enabled
+        if (componentType == 1 && entity.HasComponent<SpriteRendererComponent>()) return entity.GetComponent<SpriteRendererComponent>().Enabled;
+        if (componentType == 2 && entity.HasComponent<MeshRendererComponent>()) return entity.GetComponent<MeshRendererComponent>().Enabled;
+        if (componentType == 3 && entity.HasComponent<VelocityComponent>()) return entity.GetComponent<VelocityComponent>().Enabled;
+        if (componentType == 4) return true; // Hierarchy is always enabled
+        if (componentType == 5 && entity.HasComponent<SpriteAnimationComponent>()) return entity.GetComponent<SpriteAnimationComponent>().Enabled;
+        if (componentType == 6 && entity.HasComponent<TilemapComponent>()) return entity.GetComponent<TilemapComponent>().Enabled;
+        if (componentType == 7 && entity.HasComponent<AnimatorComponent>()) return entity.GetComponent<AnimatorComponent>().Enabled;
+        if (componentType == 8 && entity.HasComponent<AudioSourceComponent>()) return entity.GetComponent<AudioSourceComponent>().Enabled;
+        if (componentType == 9 && entity.HasComponent<ScriptComponent>()) return entity.GetComponent<ScriptComponent>().Enabled;
+        return false;
+    }
+
+    static void __stdcall SetComponentEnabledCallback(uint64_t entityID, int componentType, bool enabled) {
+        auto scene = ScriptEngine::GetActiveScene();
+        if (!scene) return;
+        Entity entity = scene->GetEntityByUUID(UUID(entityID));
+        if (!entity) return;
+
+        if (componentType == 1 && entity.HasComponent<SpriteRendererComponent>()) entity.GetComponent<SpriteRendererComponent>().Enabled = enabled;
+        if (componentType == 2 && entity.HasComponent<MeshRendererComponent>()) entity.GetComponent<MeshRendererComponent>().Enabled = enabled;
+        if (componentType == 3 && entity.HasComponent<VelocityComponent>()) entity.GetComponent<VelocityComponent>().Enabled = enabled;
+        if (componentType == 5 && entity.HasComponent<SpriteAnimationComponent>()) entity.GetComponent<SpriteAnimationComponent>().Enabled = enabled;
+        if (componentType == 6 && entity.HasComponent<TilemapComponent>()) entity.GetComponent<TilemapComponent>().Enabled = enabled;
+        if (componentType == 7 && entity.HasComponent<AnimatorComponent>()) entity.GetComponent<AnimatorComponent>().Enabled = enabled;
+        if (componentType == 8 && entity.HasComponent<AudioSourceComponent>()) entity.GetComponent<AudioSourceComponent>().Enabled = enabled;
+        if (componentType == 9 && entity.HasComponent<ScriptComponent>()) entity.GetComponent<ScriptComponent>().Enabled = enabled;
     }
 
     static void __stdcall SetVelocityCallback(uint64_t entityID, Vector3* linear, Vector3* angular) {
@@ -300,7 +337,9 @@ namespace PixelEngine {
             (void*)HasComponentCallback,
             (void*)AddComponentCallback,
             (void*)GetVelocityCallback,
-            (void*)SetVelocityCallback
+            (void*)SetVelocityCallback,
+            (void*)GetComponentEnabledCallback,
+            (void*)SetComponentEnabledCallback
         );
 
         s_Initialized = true;
@@ -333,6 +372,7 @@ namespace PixelEngine {
         auto view = s_ActiveScene->Reg().view<ScriptComponent>();
         for (auto entityID : view) {
             Entity entity = { entityID, s_ActiveScene.get() };
+            if (!entity.GetComponent<ScriptComponent>().Enabled) continue;
             uint64_t uuid = static_cast<uint64_t>(entity.GetComponent<IDComponent>().ID);
             s_CS_OnUpdate(uuid, dt);
         }
@@ -360,6 +400,7 @@ namespace PixelEngine {
     void ScriptEngine::OnCollisionEnter(Entity entity, Entity other) {
         if (!s_Initialized || !s_CS_OnCollisionEnter) return;
         if (entity.HasComponent<ScriptComponent>()) {
+            if (!entity.GetComponent<ScriptComponent>().Enabled) return;
             uint64_t entityID = static_cast<uint64_t>(entity.GetComponent<IDComponent>().ID);
             uint64_t otherID = static_cast<uint64_t>(other.GetComponent<IDComponent>().ID);
             s_CS_OnCollisionEnter(entityID, otherID);

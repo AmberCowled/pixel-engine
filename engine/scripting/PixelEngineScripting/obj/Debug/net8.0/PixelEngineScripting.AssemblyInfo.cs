@@ -13,7 +13,7 @@ using System.Reflection;
 [assembly: System.Reflection.AssemblyCompanyAttribute("PixelEngineScripting")]
 [assembly: System.Reflection.AssemblyConfigurationAttribute("Debug")]
 [assembly: System.Reflection.AssemblyFileVersionAttribute("1.0.0.0")]
-[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+85d54f34b7eb12ef08b55727489adb905272aeb7")]
+[assembly: System.Reflection.AssemblyInformationalVersionAttribute("1.0.0+4fba492555e0b09f9540f9e996b8b1fea1aeaaf4")]
 [assembly: System.Reflection.AssemblyProductAttribute("PixelEngineScripting")]
 [assembly: System.Reflection.AssemblyTitleAttribute("PixelEngineScripting")]
 [assembly: System.Reflection.AssemblyVersionAttribute("1.0.0.0")]

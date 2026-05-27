@@ -820,7 +820,7 @@ public:
                         std::ofstream scriptOut(scriptPath);
                         if (scriptOut.is_open()) {
                             scriptOut << "using PixelEngine;\n\n";
-                            scriptOut << "public class " << className << " : ScriptableEntity {\n";
+                            scriptOut << "public class " << className << " : MonoBehaviour {\n";
                             scriptOut << "    public override void OnCreate() {\n";
                             scriptOut << "        Log.Info(\"" << className << " script OnCreate called!\");\n";
                             scriptOut << "    }\n\n";
@@ -1081,7 +1081,7 @@ public:
         if (scriptOut.is_open()) {
             scriptOut << R"(using PixelEngine;
  
-public class Player : ScriptableEntity {
+public class Player : MonoBehaviour {
     public override void OnCreate() {
         Log.Info("Player script OnCreate called!");
     }
